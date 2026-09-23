@@ -1,3 +1,7 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
 # Dhaka Tesla Pool — working rules
 
 Take-home project for the RoBenDevs Software Engineer Internship. The brief is in [docs/PRD.md](docs/PRD.md) — read it before any design decision.
@@ -9,6 +13,28 @@ Take-home project for the RoBenDevs Software Engineer Internship. The brief is i
 - PostgreSQL via Prisma (raw SQL for the seat-claim query)
 - Vitest + supertest against a real Postgres
 - `docker compose up` runs everything
+
+Not installed yet: Prisma, Zod, JWT, Vitest, supertest. Add each one in its own step.
+
+## Commands
+
+`backend/` and `frontend/` are two separate pnpm projects (no root `package.json`). Run commands inside each folder.
+
+- Backend: `pnpm dev` (tsx watch, port 4000), `pnpm build` (tsc to `dist/`), `pnpm start`
+- Frontend: `pnpm dev` (port 3000), `pnpm build`, `pnpm lint`
+- Everything: `cp .env.example .env`, then `docker compose up --build` from the repo root
+- Health check: `GET http://localhost:4000/health`
+
+No test runner yet.
+
+## Architecture notes
+
+- **Backend `app.ts` / `server.ts` split.** `app.ts` builds and exports the Express app. `server.ts` only calls `listen`. Tests should import `app` directly (supertest), never start the server.
+- **Backend is ESM with `module: nodenext`.** Relative imports need the `.js` suffix, even in `.ts` files (`import { app } from "./app.js"`).
+- **Frontend uses `output: "standalone"`** in `next.config.ts`. The frontend Dockerfile depends on it. Don't remove it.
+- **Next.js version is new (16.x).** Read [frontend/AGENTS.md](frontend/AGENTS.md): check `frontend/node_modules/next/dist/docs/` before writing Next.js code.
+- **Compose startup order:** `db` (pg_isready) → `backend` (waits for db healthy; its healthcheck hits `/health`) → `frontend`. All ports bind to `127.0.0.1` only. `.env` must set `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB` or compose refuses to start.
+- **Postgres 18** stores data under `/var/lib/postgresql` (not `.../data`). The volume mount in `docker-compose.yml` is correct as is.
 
 ## How we work
 
@@ -28,4 +54,4 @@ Take-home project for the RoBenDevs Software Engineer Internship. The brief is i
 
 ## AI usage
 
-AI use is allowed and must be shown openly (PRD Section 8). Keep this file in the repo. Note accepted and rejected AI suggestions as we go, for the README's AI Usage section.
+AI use is allowed and must be shown openly (PRD Section 8). Keep this file in the repo. Log accepted and rejected AI suggestions as we go in [docs/ai-usage.md](docs/ai-usage.md). The README's AI Usage section summarizes it at the end.
