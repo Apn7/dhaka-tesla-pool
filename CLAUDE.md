@@ -4,8 +4,8 @@ Take-home project for the RoBenDevs Software Engineer Internship. The brief is i
 
 ## Stack (decided)
 
-- `web/` — Next.js (App Router) + TypeScript + Tailwind
-- `api/` — Node.js + Express + TypeScript, Zod validation, JWT in httpOnly cookie
+- `frontend/` — Next.js (App Router) + TypeScript + Tailwind
+- `backend/` — Node.js + Express + TypeScript, Zod validation, JWT in httpOnly cookie
 - PostgreSQL via Prisma (raw SQL for the seat-claim query)
 - Vitest + supertest against a real Postgres
 - `docker compose up` runs everything
