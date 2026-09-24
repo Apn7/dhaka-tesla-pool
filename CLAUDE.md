@@ -10,17 +10,17 @@ Take-home project for the RoBenDevs Software Engineer Internship. The brief is i
 
 - `frontend/` — Next.js (App Router) + TypeScript + Tailwind
 - `backend/` — Node.js + Express + TypeScript, Zod validation, JWT in httpOnly cookie
-- PostgreSQL via Prisma (raw SQL for the seat-claim query)
+- PostgreSQL via Drizzle ORM (`drizzle-orm` 0.45 + `pg` driver, `drizzle-kit` 0.31 for migrations)
 - Vitest + supertest against a real Postgres
 - `docker compose up` runs everything
 
-Not installed yet: Prisma, Zod, JWT, Vitest, supertest. Add each one in its own step.
+Not installed yet: Zod, JWT, Vitest, supertest. Add each one in its own step.
 
 ## Commands
 
 `backend/` and `frontend/` are two separate pnpm projects (no root `package.json`). Run commands inside each folder.
 
-- Backend: `pnpm dev` (tsx watch, port 4000), `pnpm build` (tsc to `dist/`), `pnpm start`
+- Backend: `pnpm dev` (tsx watch, port 4000, loads the root `../.env`; needs `docker compose up -d db`), `pnpm build` (tsc to `dist/`), `pnpm start`
 - Frontend: `pnpm dev` (port 3000), `pnpm build`, `pnpm lint`
 - Everything: `cp .env.example .env`, then `docker compose up --build` from the repo root
 - Health check: `GET http://localhost:4000/health`
@@ -34,6 +34,8 @@ No test runner yet.
 - **Frontend uses `output: "standalone"`** in `next.config.ts`. The frontend Dockerfile depends on it. Don't remove it.
 - **Next.js version is new (16.x).** Read [frontend/AGENTS.md](frontend/AGENTS.md): check `frontend/node_modules/next/dist/docs/` before writing Next.js code.
 - **Compose startup order:** `db` (pg_isready) → `backend` (waits for db healthy; its healthcheck hits `/health`) → `frontend`. All ports bind to `127.0.0.1` only. `.env` must set `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB` or compose refuses to start.
+- **Drizzle is pinned to 0.45 (not the 1.0 RC).** Online docs mix 1.0 syntax in. For 0.45: `migrate(db, { migrationsFolder })` needs the folder; migration files go to `backend/drizzle/`. When unsure, check the installed types in `node_modules/drizzle-orm`.
+- **One `.env` at the repo root.** `pnpm dev` loads it with Node's `--env-file` (no dotenv). `DATABASE_URL` uses host `localhost` there; compose builds its own URL with host `db` for the backend container. `src/db/index.ts` throws at startup if `DATABASE_URL` is missing.
 - **Postgres 18** stores data under `/var/lib/postgresql` (not `.../data`). The volume mount in `docker-compose.yml` is correct as is.
 
 ## How we work
