@@ -99,7 +99,7 @@ erDiagram
 | `users` | Passengers and drivers | One login table; `role` decides what each user can do. |
 | `vehicles` | Each driver's Tesla (Bullet, 3 seats) | Capacity belongs to the vehicle. `is_online` is the driver's online/offline switch: offline drivers see no requests and cannot accept. |
 | `areas` | The fixed list of Dhaka areas | Pickup and drop-off are picked from this list (no map API). |
-| `roads` | Road links between neighbouring areas, in meters | Real driving distances (Google Maps). The API loads them at startup and runs Floyd–Warshall for all shortest paths. |
+| `roads` | Road links between neighbouring areas, in meters | Real driving distances (Google Maps). The API loads them at startup and runs Floyd–Warshall once for the shortest distance between every pair of areas. |
 | `rides` | One trip of one Tesla = one pool | Groups passengers sharing a vehicle. Holds the seat counter that must never exceed capacity. |
 | `ride_requests` | One passenger's booking | Their own pickup, drop-off, seats, fare and status. Membership in a pool = `ride_id`. |
 | `ride_events` | Append-only history of every status change | Explains exactly what happened, when, and who did it (PRD Section 2). |
