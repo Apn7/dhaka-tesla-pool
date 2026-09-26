@@ -1,9 +1,10 @@
 export type Road = { areaAId: string; areaBId: string; distanceM: number };
+export type Distance = (fromAreaId: string, toAreaId: string) => number;
 
 // Shortest road distance (meters) between every pair of areas, via Floyd–Warshall.
 // Built once at startup from the areas and roads tables.
 // ponytail: O(n³) time and O(n²) memory; trivial for 12 areas, not for a real city map.
-export function buildDistances(areaIds: string[], roads: Road[]) {
+export function buildDistances(areaIds: string[], roads: Road[]): Distance {
   const n = areaIds.length;
   const index = new Map(areaIds.map((id, i) => [id, i]));
   const indexOf = (id: string) => {
