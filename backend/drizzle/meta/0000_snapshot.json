@@ -1,5 +1,5 @@
 {
-  "id": "7a7067c2-d447-45ec-82fc-14dd7f3dac74",
+  "id": "a44fa96a-2ca3-44c5-908c-7fded4221cec",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -232,21 +232,8 @@
           "primaryKey": false,
           "notNull": false
         },
-        "drop_order": {
-          "name": "drop_order",
-          "type": "smallint",
-          "primaryKey": false,
-          "notNull": false
-        },
         "created_at": {
           "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
           "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": true,
@@ -402,10 +389,6 @@
           "name": "ride_requests_fare_positive",
           "value": "\"ride_requests\".\"fare_paisa\" > 0"
         },
-        "ride_requests_drop_order_positive": {
-          "name": "ride_requests_drop_order_positive",
-          "value": "\"ride_requests\".\"drop_order\" >= 1"
-        },
         "ride_requests_matched_has_ride": {
           "name": "ride_requests_matched_has_ride",
           "value": "\"ride_requests\".\"status\" = 'CANCELLED' OR (\"ride_requests\".\"status\" = 'REQUESTED') = (\"ride_requests\".\"ride_id\" IS NULL)"
@@ -459,13 +442,6 @@
         },
         "created_at": {
           "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
           "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": true,
@@ -554,13 +530,6 @@
       "name": "roads",
       "schema": "",
       "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "uuidv7()"
-        },
         "area_a_id": {
           "name": "area_a_id",
           "type": "uuid",
@@ -609,17 +578,16 @@
           "onUpdate": "no action"
         }
       },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "roads_area_pair_unique": {
-          "name": "roads_area_pair_unique",
-          "nullsNotDistinct": false,
+      "compositePrimaryKeys": {
+        "roads_area_a_id_area_b_id_pk": {
+          "name": "roads_area_a_id_area_b_id_pk",
           "columns": [
             "area_a_id",
             "area_b_id"
           ]
         }
       },
+      "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {
         "roads_area_order": {
@@ -736,13 +704,6 @@
           "primaryKey": false,
           "notNull": true,
           "default": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
         }
       },
       "indexes": {},

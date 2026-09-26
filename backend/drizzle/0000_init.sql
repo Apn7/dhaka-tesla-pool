@@ -28,14 +28,11 @@ CREATE TABLE "ride_requests" (
 	"fare_paisa" integer NOT NULL,
 	"status" "request_status" DEFAULT 'REQUESTED' NOT NULL,
 	"ride_id" uuid,
-	"drop_order" smallint,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
-	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
 	CONSTRAINT "ride_requests_different_areas" CHECK ("ride_requests"."pickup_area_id" <> "ride_requests"."dropoff_area_id"),
 	CONSTRAINT "ride_requests_seats_range" CHECK ("ride_requests"."seats" BETWEEN 1 AND 3),
 	CONSTRAINT "ride_requests_distance_positive" CHECK ("ride_requests"."distance_m" > 0),
 	CONSTRAINT "ride_requests_fare_positive" CHECK ("ride_requests"."fare_paisa" > 0),
-	CONSTRAINT "ride_requests_drop_order_positive" CHECK ("ride_requests"."drop_order" >= 1),
 	CONSTRAINT "ride_requests_matched_has_ride" CHECK ("ride_requests"."status" = 'CANCELLED' OR ("ride_requests"."status" = 'REQUESTED') = ("ride_requests"."ride_id" IS NULL))
 );
 --> statement-breakpoint
@@ -47,16 +44,14 @@ CREATE TABLE "rides" (
 	"capacity" smallint NOT NULL,
 	"seats_taken" smallint DEFAULT 0 NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
-	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
 	CONSTRAINT "rides_seats_within_capacity" CHECK ("rides"."seats_taken" BETWEEN 0 AND "rides"."capacity")
 );
 --> statement-breakpoint
 CREATE TABLE "roads" (
-	"id" uuid PRIMARY KEY DEFAULT uuidv7() NOT NULL,
 	"area_a_id" uuid NOT NULL,
 	"area_b_id" uuid NOT NULL,
 	"distance_m" integer NOT NULL,
-	CONSTRAINT "roads_area_pair_unique" UNIQUE("area_a_id","area_b_id"),
+	CONSTRAINT "roads_area_a_id_area_b_id_pk" PRIMARY KEY("area_a_id","area_b_id"),
 	CONSTRAINT "roads_area_order" CHECK ("roads"."area_a_id" < "roads"."area_b_id"),
 	CONSTRAINT "roads_distance_positive" CHECK ("roads"."distance_m" > 0)
 );
@@ -76,7 +71,6 @@ CREATE TABLE "vehicles" (
 	"name" text NOT NULL,
 	"capacity" smallint NOT NULL,
 	"is_online" boolean DEFAULT false NOT NULL,
-	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	CONSTRAINT "vehicles_driver_id_unique" UNIQUE("driver_id"),
 	CONSTRAINT "vehicles_capacity_range" CHECK ("vehicles"."capacity" BETWEEN 1 AND 6)
 );

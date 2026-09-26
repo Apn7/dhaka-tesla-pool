@@ -6,10 +6,10 @@ import {
   integer,
   pgEnum,
   pgTable,
+  primaryKey,
   smallint,
   text,
   timestamp,
-  unique,
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
@@ -38,11 +38,6 @@ export const requestStatus = pgEnum("request_status", [
 // UUID v7 is built into Postgres 18: time-ordered, so indexes stay compact
 const id = () => uuid("id").primaryKey().default(sql`uuidv7()`);
 const createdAt = () => timestamp("created_at", { withTimezone: true }).notNull().defaultNow();
-const updatedAt = () =>
-  timestamp("updated_at", { withTimezone: true })
-    .notNull()
-    .defaultNow()
-    .$onUpdate(() => new Date());
 
 export const users = pgTable(
   "users",
@@ -71,7 +66,6 @@ export const vehicles = pgTable(
     name: text("name").notNull(),
     capacity: smallint("capacity").notNull(),
     isOnline: boolean("is_online").notNull().default(false),
-    createdAt: createdAt(),
   },
   (t) => [check("vehicles_capacity_range", sql`${t.capacity} BETWEEN 1 AND 6`)],
 );
@@ -81,11 +75,11 @@ export const areas = pgTable("areas", {
   name: text("name").notNull().unique(),
 });
 
-// Undirected road between neighbouring areas, stored once (area_a < area_b)
+// Undirected road between neighbouring areas, stored once (area_a < area_b).
+// The area pair is the natural key, so no separate id.
 export const roads = pgTable(
   "roads",
   {
-    id: id(),
     areaAId: uuid("area_a_id")
       .notNull()
       .references(() => areas.id),
@@ -95,7 +89,7 @@ export const roads = pgTable(
     distanceM: integer("distance_m").notNull(),
   },
   (t) => [
-    unique("roads_area_pair_unique").on(t.areaAId, t.areaBId),
+    primaryKey({ columns: [t.areaAId, t.areaBId] }),
     check("roads_area_order", sql`${t.areaAId} < ${t.areaBId}`),
     check("roads_distance_positive", sql`${t.distanceM} > 0`),
   ],
@@ -117,7 +111,6 @@ export const rides = pgTable(
     capacity: smallint("capacity").notNull(),
     seatsTaken: smallint("seats_taken").notNull().default(0),
     createdAt: createdAt(),
-    updatedAt: updatedAt(),
   },
   (t) => [
     check("rides_seats_within_capacity", sql`${t.seatsTaken} BETWEEN 0 AND ${t.capacity}`),
@@ -146,16 +139,13 @@ export const rideRequests = pgTable(
     farePaisa: integer("fare_paisa").notNull(),
     status: requestStatus("status").notNull().default("REQUESTED"),
     rideId: uuid("ride_id").references(() => rides.id),
-    dropOrder: smallint("drop_order"),
     createdAt: createdAt(),
-    updatedAt: updatedAt(),
   },
   (t) => [
     check("ride_requests_different_areas", sql`${t.pickupAreaId} <> ${t.dropoffAreaId}`),
     check("ride_requests_seats_range", sql`${t.seats} BETWEEN 1 AND 3`),
     check("ride_requests_distance_positive", sql`${t.distanceM} > 0`),
     check("ride_requests_fare_positive", sql`${t.farePaisa} > 0`),
-    check("ride_requests_drop_order_positive", sql`${t.dropOrder} >= 1`),
     // Waiting requests have no ride; matched, arrived, started and completed ones must have one
     check(
       "ride_requests_matched_has_ride",

@@ -50,16 +50,14 @@ erDiagram
     text name "Bullet"
     smallint capacity "CHECK 1-6"
     boolean is_online "default false"
-    timestamptz created_at
   }
   areas {
     uuid id PK
     text name UK "Banani, Gulshan 1, ..."
   }
   roads {
-    uuid id PK
-    uuid area_a_id FK "CHECK area_a_id < area_b_id"
-    uuid area_b_id FK "UNIQUE with area_a_id"
+    uuid area_a_id PK,FK "CHECK area_a_id < area_b_id"
+    uuid area_b_id PK,FK "the pair is the key"
     integer distance_m "CHECK > 0"
   }
   rides {
@@ -70,7 +68,6 @@ erDiagram
     smallint capacity "copied from vehicle"
     smallint seats_taken "CHECK 0 <= seats_taken <= capacity"
     timestamptz created_at
-    timestamptz updated_at
   }
   ride_requests {
     uuid id PK
@@ -82,9 +79,7 @@ erDiagram
     integer fare_paisa "fixed at request time"
     request_status status
     uuid ride_id FK "null until matched"
-    smallint drop_order "stop number in the ride"
     timestamptz created_at
-    timestamptz updated_at
   }
   ride_events {
     uuid id PK
@@ -122,6 +117,20 @@ Two statuses instead of the PRD's single lifecycle: Rafiq can cancel without can
 - **Seat claims are atomic:** `UPDATE rides SET seats_taken = seats_taken + n WHERE id = $1 AND seats_taken + n <= capacity`. Zero rows updated = trip full.
 - **One active ride per vehicle** and **one active request per passenger**: partial unique indexes on `status IN (active statuses)`. A double click cannot create two bookings.
 - **Matched means pooled:** a `REQUESTED` request has no `ride_id`; `MATCHED`, `DRIVER_ARRIVED`, `STARTED` and `COMPLETED` requests must have one.
-- **Roads are stored once:** `area_a_id < area_b_id` plus a unique pair, so Banani–Mohakhali cannot also appear as Mohakhali–Banani.
+- **Roads are stored once:** `area_a_id < area_b_id`, and the pair is the primary key, so Banani–Mohakhali cannot also appear as Mohakhali–Banani.
 - **Money is integer paisa** and distance is integer meters. No floating point anywhere in the fare.
 - **IDs are UUID v7** (built into Postgres 18): not guessable like 1, 2, 3, and time-ordered, so indexes stay compact.
+
+### Normalization
+
+The schema is in third normal form: each fact is stored once. There are five deliberate exceptions, each with a reason:
+
+| Column | Why it is stored anyway |
+|---|---|
+| `ride_requests.fare_paisa` | A snapshot, like the price on a receipt. If rates change later, an old fare must not change. |
+| `ride_requests.distance_m` | A snapshot. If roads are re-measured, old trips keep the distance they were charged for. |
+| `rides.capacity` | A CHECK can only see its own row. Also a snapshot of the vehicle's capacity at trip time. |
+| `rides.seats_taken` | Could be `SUM(seats)` of the ride's requests, but the counter makes the one-statement atomic seat claim possible. Always changed in the same transaction as the request. |
+| `ride_requests.status` (after matching it repeats the trip's status) | The "one active request per passenger" partial unique index needs the status on the request's own row. Both statuses change in the same transaction. |
+
+Not stored, because they can be derived: the drop-off order (recomputed from the road graph when the driver's screen asks) and "last updated" times (`ride_events` already records every change with its time). No column is copied only for speed: at this size, joins on indexed foreign keys are fast enough, and denormalizing for performance would wait for a measured slow query.
