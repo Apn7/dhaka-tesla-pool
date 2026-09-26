@@ -23,7 +23,8 @@ Not installed yet: Zod, JWT, Vitest, supertest. Add each one in its own step.
 - Backend: `pnpm dev` (tsx watch, port 4000, loads the root `../.env`; needs `docker compose up -d db`), `pnpm build` (tsc to `dist/`), `pnpm start`
 - Backend DB: `pnpm db:generate --name <name>` writes a new SQL migration to `backend/drizzle/` from `src/db/schema.ts`. Always read the generated SQL before committing. Never edit a migration that is already on `master`; add a new one.
 - Frontend: `pnpm dev` (port 3000), `pnpm build`, `pnpm lint`
-- Everything: `cp .env.example .env`, then `docker compose up --build` from the repo root
+- Everything: `cp .env.example .env`, then `docker compose up --build` from the repo root (db → backend runs migrations → one-shot `seed` fills demo data and exits → frontend)
+- Demo logins (seed): `jashim@`, `kamal@` (drivers), `nusrat@`, `rafiq@`, `shirin@` (passengers) `teslapool.test`, password `bullet123`. Local seed: `pnpm db:seed` in backend/
 - Health check: `GET http://localhost:4000/health`
 
 No test runner yet.
