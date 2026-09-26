@@ -38,6 +38,7 @@ No test runner yet.
 - **Drizzle is pinned to 0.45 (not the 1.0 RC).** Online docs mix 1.0 syntax in. For 0.45: `migrate(db, { migrationsFolder })` needs the folder; migration files go to `backend/drizzle/`. When unsure, check the installed types in `node_modules/drizzle-orm`.
 - **One `.env` at the repo root.** `pnpm dev` loads it with Node's `--env-file` (no dotenv). `DATABASE_URL` uses host `localhost` there; compose builds its own URL with host `db` for the backend container. `src/db/index.ts` throws at startup if `DATABASE_URL` is missing.
 - **`/health` runs `select 1`**: 200 `{db:"up"}` or 503 `{db:"down"}`. The pg pool has an `error` listener: without it, a Postgres restart crashes the whole Node process (tested). Keep it.
+- **Migrations run at backend startup** (`server.ts`, before `listen`). All pending migrations apply in one transaction; if they fail the process exits. The Dockerfile copies `drizzle/` into the image. No cross-instance lock: fine for one backend.
 - **Schema and integrity rules** are explained in [docs/architecture.md](docs/architecture.md) (ERD + every CHECK and index). Keep it in sync with `src/db/schema.ts`. IDs are UUID v7 (`uuidv7()` default), money is integer paisa, distance is integer meters.
 - **Postgres 18** stores data under `/var/lib/postgresql` (not `.../data`). The volume mount in `docker-compose.yml` is correct as is.
 
