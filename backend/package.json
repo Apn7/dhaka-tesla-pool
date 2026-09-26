@@ -7,7 +7,8 @@
     "dev": "tsx watch --env-file=../.env src/server.ts",
     "build": "tsc",
     "start": "node dist/server.js",
-    "db:generate": "drizzle-kit generate"
+    "db:generate": "drizzle-kit generate",
+    "db:seed": "tsx --env-file=../.env src/db/seed.ts"
   },
   "dependencies": {
     "drizzle-orm": "0.45.3",
