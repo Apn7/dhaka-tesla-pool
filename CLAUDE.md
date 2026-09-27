@@ -14,7 +14,7 @@ Take-home project for the RoBenDevs Software Engineer Internship. The brief is i
 - Vitest + supertest against a real Postgres
 - `docker compose up` runs everything
 
-Not installed yet: Zod, JWT, Vitest, supertest. Add each one in its own step.
+Not installed yet: Zod, JWT, supertest. Add each one in its own step.
 
 ## Commands
 
@@ -27,11 +27,11 @@ Not installed yet: Zod, JWT, Vitest, supertest. Add each one in its own step.
 - Demo logins (seed): `jashim@`, `kamal@` (drivers), `nusrat@`, `rafiq@`, `shirin@` (passengers) `teslapool.test`, password `bullet123`. Local seed: `pnpm db:seed` in backend/
 - Health check: `GET http://localhost:4000/health`
 
-No test runner yet.
+Tests: `pnpm test` in backend/ (Vitest, runs once). Test files sit next to the code as `*.test.ts` and are left out of the `tsc` build.
 
 ## Architecture notes
 
-- **Backend layout: feature modules + pure domain.** `src/modules/<feature>/` holds `<feature>.routes.ts` (HTTP only: Zod-validate input, call the service, map result to a status code; no SQL, no business rules) and `<feature>.service.ts` (business rules, transactions, Drizzle queries). `src/domain/` holds pure functions with no DB or HTTP (fare, lifecycle transition map, `geo/` graph + matching) and is unit tested directly. `src/middleware/` has auth and error handling. No repository layer: Drizzle is already the data layer, and the atomic seat-claim SQL must stay visible.
+- **Backend layout: feature modules + pure domain.** `src/modules/<feature>/` holds `<feature>.routes.ts` (HTTP only: Zod-validate input, call the service, map result to a status code; no SQL, no business rules) and `<feature>.service.ts` (business rules, transactions, Drizzle queries). `src/domain/` holds pure functions with no DB or HTTP (`graph.ts` road distances, matching, fare, lifecycle transition map) and is unit tested directly. `src/middleware/` has auth and error handling. No repository layer: Drizzle is already the data layer, and the atomic seat-claim SQL must stay visible.
 - **Migrations are automatic, seed is not.** The app migrates itself at startup. Demo data lives in `src/db/seed.ts` (`pnpm db:seed`); only docker compose runs it automatically (one-shot `seed` service). The app never seeds itself.
 - **Passwords:** Node's built-in `scrypt` (`src/lib/password.ts`), stored as `scrypt$N$r$p$salt$hash`. No bcrypt dependency.
 - **Backend `app.ts` / `server.ts` split.** `app.ts` builds and exports the Express app. `server.ts` only calls `listen`. Tests should import `app` directly (supertest), never start the server.
@@ -48,13 +48,13 @@ No test runner yet.
 
 ## Product rules (agreed; don't re-open without Ekramul)
 
-- **Booking: driver accepts.** Passenger picks pickup area, drop-off area, seats (1–3), sees the fare, requests. A driver with no active ride sees all open requests; accepting creates a ride. A driver with an open ride sees only requests that fit it; accepting adds them. The backend re-checks the match on every accept. No auto-join.
+- **Booking: driver accepts.** Passenger picks pickup area, drop-off area, seats (1–3), sees the fare, requests. A driver with no active ride sees all open requests; accepting creates a ride. A driver with an open ride (`ACCEPTED` or `DRIVER_ARRIVED`, i.e. not started yet) sees only requests that fit it; accepting adds them. Joining a ride where the driver has already arrived moves the request `REQUESTED → MATCHED → DRIVER_ARRIVED` in one transaction (two events, no special jump). The backend re-checks the match on every accept. No auto-join.
 - **Online/offline:** `vehicles.is_online`. Offline drivers see no requests and can't accept (checked inside the accept transaction). Going offline mid-trip is allowed; the current ride continues.
-- **Geography:** 12 areas + 22 roads (`roads.distance_m`, measured in Google Maps, cross-checked with TomTom). Floyd–Warshall runs once at startup (all-pairs shortest distance + path). No map API, no lat/long.
-- **Matching:** same pickup area; try every drop-off order and keep the shortest; every passenger's detour (pooled route − direct route) must be ≤ `MAX_DETOUR_M = 3500`. Calibrated on real data: Nusrat (Banani→Mohakhali) + Rafiq (Banani→Gulshan 1) = Rafiq +3.1 km, accepted; Mohakhali + Uttara = +5.6 km, rejected. Multiple pickup areas per ride are out of scope (design choice, listed as a next improvement).
-- **Fare:** `(30 Tk + 12 Tk × km) × seats × 0.8`, km = shortest road distance rounded to 0.1 km. Integer math: `(3000 + 120 × units_of_100m) × seats × 4/5` paisa, rounded once. Fixed at request time, never changes. Every ride is shareable (20% pool discount always). Payment: cash only.
-- **Lifecycle:** ride `ACCEPTED → DRIVER_ARRIVED → STARTED → COMPLETED` (or `CANCELLED` if everyone cancels before start); request `REQUESTED → MATCHED → DRIVER_ARRIVED → STARTED → COMPLETED` (or `CANCELLED`). One transition map in `domain/`; anything else is rejected. Ride and request statuses change in the same transaction, and every change writes a `ride_events` row.
-- **Cancel:** free, any time before the ride starts; not after. Frees the seats in the same transaction. Destination can't be changed after booking.
+- **Geography:** 12 areas + 22 roads (`roads.distance_m`, measured in Google Maps, cross-checked with TomTom). Floyd–Warshall runs once at startup and keeps all-pairs shortest distances in memory (`domain/graph.ts`). No stored paths: nothing needs them yet. No map API, no lat/long.
+- **Matching:** same pickup area (filtered in the SQL query). Then `planDropoffs` (`domain/matching.ts`) tries every drop-off order, drops any order where some passenger's detour (distance travelled until their drop-off − their direct distance) is over `MAX_DETOUR_M = 3500`, and keeps the shortest remaining one; none left = can't pool. Calibrated on real data: Nusrat (Banani→Mohakhali) + Rafiq (Banani→Gulshan 1) = Rafiq +3.1 km, accepted; Mohakhali + Uttara = +5.6 km, rejected. Multiple pickup areas per ride are out of scope (design choice, listed as a next improvement).
+- **Fare:** PRD shape `baseFare + distanceCharge − poolDiscount`, per seat × seats: 30 Tk + 12 Tk × km, minus 20%. km = shortest road distance rounded to 0.1 km, halves up (the only rounding). `calculateFare` (`domain/fare.ts`) returns the breakdown in paisa for the UI; only the total is stored (`fare_paisa`). The 20% is always whole paisa (3000 and 120 both divide by 5). Nusrat 2.8 km = 30 + 33.60 − 12.72 = 50.88 Tk. Fixed at request time, never changes. Every ride is shareable (20% pool discount always). Payment: cash only.
+- **Lifecycle:** ride `ACCEPTED → DRIVER_ARRIVED → STARTED → COMPLETED` (or `CANCELLED` if everyone cancels before start); request `REQUESTED → MATCHED → DRIVER_ARRIVED → STARTED → COMPLETED` (or `CANCELLED`). Transition maps in `domain/lifecycle.ts`; anything else is rejected. Services build their atomic `UPDATE ... WHERE status IN (...)` from `allowedFrom(map, to)`, so the rule lives in one place. Status types come from the `pgEnum`s in `schema.ts`. Ride and request statuses change in the same transaction, and every change writes a `ride_events` row.
+- **Cancel:** free, any time before the ride starts; not after. Join and free cancel both end when the driver taps Start (`OPEN_RIDE_STATUSES`). Driver cancel: on hold, not built (would need to re-open every passenger's request). Frees the seats in the same transaction. Destination can't be changed after booking.
 - **Concurrency (3 races):** last seat (`UPDATE rides SET seats_taken = seats_taken + n WHERE id = $1 AND seats_taken + n <= capacity`, 0 rows = full), two drivers accept the same request (`... WHERE status = 'REQUESTED'`), cancel vs accept (same status condition). Each gets a real concurrent test (`Promise.all` against Postgres). Kamal/Toofan exist in the seed for the two-driver race.
 
 ## How we work

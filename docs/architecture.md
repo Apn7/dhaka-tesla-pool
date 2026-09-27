@@ -99,15 +99,15 @@ erDiagram
 | `users` | Passengers and drivers | One login table; `role` decides what each user can do. |
 | `vehicles` | Each driver's Tesla (Bullet, 3 seats) | Capacity belongs to the vehicle. `is_online` is the driver's online/offline switch: offline drivers see no requests and cannot accept. |
 | `areas` | The fixed list of Dhaka areas | Pickup and drop-off are picked from this list (no map API). |
-| `roads` | Road links between neighbouring areas, in meters | Real driving distances (Google Maps). The API loads them at startup and runs Floyd–Warshall for all shortest paths. |
+| `roads` | Road links between neighbouring areas, in meters | Real driving distances (Google Maps). The API loads them at startup and runs Floyd–Warshall once for the shortest distance between every pair of areas. |
 | `rides` | One trip of one Tesla = one pool | Groups passengers sharing a vehicle. Holds the seat counter that must never exceed capacity. |
 | `ride_requests` | One passenger's booking | Their own pickup, drop-off, seats, fare and status. Membership in a pool = `ride_id`. |
 | `ride_events` | Append-only history of every status change | Explains exactly what happened, when, and who did it (PRD Section 2). |
 
 ### Statuses
 
-- `ride_status` (the trip, what Jashim sees): `ACCEPTED → DRIVER_ARRIVED → STARTED → COMPLETED`, or `CANCELLED` if every passenger cancels before the start.
-- `request_status` (each passenger): `REQUESTED → MATCHED → DRIVER_ARRIVED → STARTED → COMPLETED`, or `CANCELLED` before the start.
+- `ride_status` (the trip, what Jashim sees): `ACCEPTED → DRIVER_ARRIVED → STARTED → COMPLETED`, or `CANCELLED` if every passenger cancels before the start. New passengers can join until `STARTED` (the car is still at the pickup area).
+- `request_status` (each passenger): `REQUESTED → MATCHED → DRIVER_ARRIVED → STARTED → COMPLETED`, or `CANCELLED` before the start. The allowed moves are one map per status type in `backend/src/domain/lifecycle.ts`.
 
 Two statuses instead of the PRD's single lifecycle: Rafiq can cancel without cancelling Nusrat's ride, and a request can wait (`REQUESTED`) before any trip exists.
 
@@ -118,7 +118,7 @@ Two statuses instead of the PRD's single lifecycle: Rafiq can cancel without can
 - **One active ride per vehicle** and **one active request per passenger**: partial unique indexes on `status IN (active statuses)`. A double click cannot create two bookings.
 - **Matched means pooled:** a `REQUESTED` request has no `ride_id`; `MATCHED`, `DRIVER_ARRIVED`, `STARTED` and `COMPLETED` requests must have one.
 - **Roads are stored once:** `area_a_id < area_b_id`, and the pair is the primary key, so Banani–Mohakhali cannot also appear as Mohakhali–Banani.
-- **Money is integer paisa** and distance is integer meters. No floating point anywhere in the fare.
+- **Money is integer paisa** and distance is integer meters. No floating point anywhere in the fare. The fare is computed as base + distance charge − pool discount (see `backend/src/domain/fare.ts`); only the total is stored.
 - **IDs are UUID v7** (built into Postgres 18): not guessable like 1, 2, 3, and time-ordered, so indexes stay compact.
 
 ### Normalization
