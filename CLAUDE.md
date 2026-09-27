@@ -14,7 +14,7 @@ Take-home project for the RoBenDevs Software Engineer Internship. The brief is i
 - Vitest + supertest against a real Postgres
 - `docker compose up` runs everything
 
-Not installed yet: Zod, JWT, supertest. Add each one in its own step.
+Not installed yet: Zod, supertest. Add each one together with the first code that uses it.
 
 ## Commands
 
@@ -27,13 +27,14 @@ Not installed yet: Zod, JWT, supertest. Add each one in its own step.
 - Demo logins (seed): `jashim@`, `kamal@` (drivers), `nusrat@`, `rafiq@`, `shirin@` (passengers) `teslapool.test`, password `bullet123`. Local seed: `pnpm db:seed` in backend/
 - Health check: `GET http://localhost:4000/health`
 
-Tests: `pnpm test` in backend/ (Vitest, runs once). Test files sit next to the code as `*.test.ts` and are left out of the `tsc` build.
+Tests: `pnpm test` in backend/ (Vitest, runs once). Test files sit next to the code as `*.test.ts` and are left out of the `tsc` build. `vitest.config.ts` sets a test-only `JWT_SECRET`.
 
 ## Architecture notes
 
 - **Backend layout: feature modules + pure domain.** `src/modules/<feature>/` holds `<feature>.routes.ts` (HTTP only: Zod-validate input, call the service, map result to a status code; no SQL, no business rules) and `<feature>.service.ts` (business rules, transactions, Drizzle queries). `src/domain/` holds pure functions with no DB or HTTP (`graph.ts` road distances, matching, fare, lifecycle transition map) and is unit tested directly. `src/middleware/` has auth and error handling. No repository layer: Drizzle is already the data layer, and the atomic seat-claim SQL must stay visible.
 - **Migrations are automatic, seed is not.** The app migrates itself at startup. Data the app needs to work (the Dhaka map: areas + roads) is a migration (`drizzle/0001_dhaka_map.sql`), so it exists before the server builds the road graph. Demo data (users, vehicles) lives in `src/db/seed.ts` (`pnpm db:seed`); only docker compose runs it automatically (one-shot `seed` service). The app never seeds itself.
 - **Passwords:** Node's built-in `scrypt` (`src/lib/password.ts`), stored as `scrypt$N$r$p$salt$hash`. No bcrypt dependency.
+- **Login tokens:** `src/lib/token.ts` signs and verifies a JWT (`jose`, HS256) holding the user id and role, valid 1 day. `JWT_SECRET` must be at least 32 characters or the backend refuses to start. No refresh tokens (a stolen token works until it expires; listed as a known limitation).
 - **Backend `app.ts` / `server.ts` split.** `app.ts` builds and exports the Express app. `server.ts` only calls `listen`. Tests should import `app` directly (supertest), never start the server.
 - **Backend is ESM with `module: nodenext`.** Relative imports need the `.js` suffix, even in `.ts` files (`import { app } from "./app.js"`).
 - **Frontend uses `output: "standalone"`** in `next.config.ts`. The frontend Dockerfile depends on it. Don't remove it.
