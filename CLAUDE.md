@@ -23,7 +23,7 @@ Not installed yet: Zod, JWT, supertest. Add each one in its own step.
 - Backend: `pnpm dev` (tsx watch, port 4000, loads the root `../.env`; needs `docker compose up -d db`), `pnpm build` (tsc to `dist/`), `pnpm start`
 - Backend DB: `pnpm db:generate --name <name>` writes a new SQL migration to `backend/drizzle/` from `src/db/schema.ts`. Always read the generated SQL before committing. Never edit a migration that is already on `master`; add a new one.
 - Frontend: `pnpm dev` (port 3000), `pnpm build`, `pnpm lint`
-- Everything: `cp .env.example .env`, then `docker compose up --build` from the repo root (db → backend runs migrations → one-shot `seed` fills demo data and exits → frontend)
+- Everything: `cp .env.example .env`, then `docker compose up --build` from the repo root (db → backend runs migrations, including the Dhaka map → one-shot `seed` adds the demo users and cars and exits → frontend)
 - Demo logins (seed): `jashim@`, `kamal@` (drivers), `nusrat@`, `rafiq@`, `shirin@` (passengers) `teslapool.test`, password `bullet123`. Local seed: `pnpm db:seed` in backend/
 - Health check: `GET http://localhost:4000/health`
 
@@ -32,7 +32,7 @@ Tests: `pnpm test` in backend/ (Vitest, runs once). Test files sit next to the c
 ## Architecture notes
 
 - **Backend layout: feature modules + pure domain.** `src/modules/<feature>/` holds `<feature>.routes.ts` (HTTP only: Zod-validate input, call the service, map result to a status code; no SQL, no business rules) and `<feature>.service.ts` (business rules, transactions, Drizzle queries). `src/domain/` holds pure functions with no DB or HTTP (`graph.ts` road distances, matching, fare, lifecycle transition map) and is unit tested directly. `src/middleware/` has auth and error handling. No repository layer: Drizzle is already the data layer, and the atomic seat-claim SQL must stay visible.
-- **Migrations are automatic, seed is not.** The app migrates itself at startup. Demo data lives in `src/db/seed.ts` (`pnpm db:seed`); only docker compose runs it automatically (one-shot `seed` service). The app never seeds itself.
+- **Migrations are automatic, seed is not.** The app migrates itself at startup. Data the app needs to work (the Dhaka map: areas + roads) is a migration (`drizzle/0001_dhaka_map.sql`), so it exists before the server builds the road graph. Demo data (users, vehicles) lives in `src/db/seed.ts` (`pnpm db:seed`); only docker compose runs it automatically (one-shot `seed` service). The app never seeds itself.
 - **Passwords:** Node's built-in `scrypt` (`src/lib/password.ts`), stored as `scrypt$N$r$p$salt$hash`. No bcrypt dependency.
 - **Backend `app.ts` / `server.ts` split.** `app.ts` builds and exports the Express app. `server.ts` only calls `listen`. Tests should import `app` directly (supertest), never start the server.
 - **Backend is ESM with `module: nodenext`.** Relative imports need the `.js` suffix, even in `.ts` files (`import { app } from "./app.js"`).

@@ -36,7 +36,7 @@ services:
       timeout: 3s
       retries: 10
 
-  # One-shot: fills the demo data (story cast, areas, roads) and exits.
+  # One-shot: fills the demo data (story cast and their Teslas) and exits.
   # Waits for a healthy backend, so migrations have already created the tables.
   seed:
     image: dhaka-tesla-pool-backend
