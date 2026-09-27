@@ -106,8 +106,8 @@ erDiagram
 
 ### Statuses
 
-- `ride_status` (the trip, what Jashim sees): `ACCEPTED → DRIVER_ARRIVED → STARTED → COMPLETED`, or `CANCELLED` if every passenger cancels before the start.
-- `request_status` (each passenger): `REQUESTED → MATCHED → DRIVER_ARRIVED → STARTED → COMPLETED`, or `CANCELLED` before the start.
+- `ride_status` (the trip, what Jashim sees): `ACCEPTED → DRIVER_ARRIVED → STARTED → COMPLETED`, or `CANCELLED` if every passenger cancels before the start. New passengers can join until `STARTED` (the car is still at the pickup area).
+- `request_status` (each passenger): `REQUESTED → MATCHED → DRIVER_ARRIVED → STARTED → COMPLETED`, or `CANCELLED` before the start. The allowed moves are one map per status type in `backend/src/domain/lifecycle.ts`.
 
 Two statuses instead of the PRD's single lifecycle: Rafiq can cancel without cancelling Nusrat's ride, and a request can wait (`REQUESTED`) before any trip exists.
 

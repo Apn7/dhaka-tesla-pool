@@ -1,7 +1,7 @@
 # Dhaka Tesla Pool — Project Requirement Document
 
 > Markdown copy of `Dhaka_Tesla_Pool_PRD_Internship.docx` (RoBenDevs Software Engineer Internship, Batch 3).
-> Deadline: **27 Sep 2026, 11:59 PM (BD time)**. Submit: public GitHub repo, live link, 6-min video, resume.
+> Deadline: **30 Sep 2026, 11:59 PM (BD time)** (from the LinkedIn job post, extended from 27 Sep; the docx has no date). Submit: public GitHub repo, live link, 6-min video, resume.
 > The docx header image is a red cycle-rickshaw branded "TESLA" — that is "Bullet".
 
 **Share a seat. Split the fare. Survive Dhaka traffic.**
