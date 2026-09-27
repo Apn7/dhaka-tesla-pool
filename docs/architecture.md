@@ -118,7 +118,7 @@ Two statuses instead of the PRD's single lifecycle: Rafiq can cancel without can
 - **One active ride per vehicle** and **one active request per passenger**: partial unique indexes on `status IN (active statuses)`. A double click cannot create two bookings.
 - **Matched means pooled:** a `REQUESTED` request has no `ride_id`; `MATCHED`, `DRIVER_ARRIVED`, `STARTED` and `COMPLETED` requests must have one.
 - **Roads are stored once:** `area_a_id < area_b_id`, and the pair is the primary key, so Banani–Mohakhali cannot also appear as Mohakhali–Banani.
-- **Money is integer paisa** and distance is integer meters. No floating point anywhere in the fare.
+- **Money is integer paisa** and distance is integer meters. No floating point anywhere in the fare. The fare is computed as base + distance charge − pool discount (see `backend/src/domain/fare.ts`); only the total is stored.
 - **IDs are UUID v7** (built into Postgres 18): not guessable like 1, 2, 3, and time-ordered, so indexes stay compact.
 
 ### Normalization
