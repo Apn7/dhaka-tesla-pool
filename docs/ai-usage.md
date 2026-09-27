@@ -6,6 +6,7 @@ A running log of how AI was used while building Dhaka Tesla Pool, kept as the wo
 
 - **Claude Code (Claude Opus)** — pair programmer in the terminal: explained options, wrote code in small reviewed steps, ran builds and tests.
 - **Context7 (MCP plugin)** — pulls current, version-specific library docs into Claude Code, so syntax comes from the docs instead of memory.
+- **Ponytail (Claude Code plugin)** — makes Claude pick the simplest solution that works and review changes for over-engineering. Code comments starting with `ponytail:` mark a deliberate shortcut, its limit, and when to upgrade it.
 - **ChatGPT** — used as a second opinion on design choices (for example, the ORM choice below).
 - **Claude Cowork** — browser agent that collected the 22 road distances from Google Maps and TomTom. I reviewed the two lists and chose which value to trust where they disagreed.
 
