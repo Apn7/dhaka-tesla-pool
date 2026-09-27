@@ -30,7 +30,8 @@ export function allowedFrom<S extends string>(transitions: Record<S, S[]>, to: S
   return (Object.keys(transitions) as S[]).filter((from) => transitions[from].includes(to));
 }
 
-// Until the driver taps Start, the car is still at the pickup area: new passengers
-// can join (like Uber, which adds riders before and after the first pickup) and
-// anyone can cancel for free. Both rules end at the same moment.
-export const OPEN_RIDE_STATUSES = allowedFrom(RIDE_TRANSITIONS, "CANCELLED");
+// Until the driver taps Start, the car is still at the pickup area, so new passengers
+// can join (like Uber, which adds riders before and after the first pickup).
+// Listed on its own, not derived from the cancel rule: if cancel rules change later,
+// passengers must still never join a car that has left.
+export const OPEN_RIDE_STATUSES: RideStatus[] = ["ACCEPTED", "DRIVER_ARRIVED"];
