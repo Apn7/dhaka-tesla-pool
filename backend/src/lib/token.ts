@@ -14,6 +14,7 @@ const secret = new TextEncoder().encode(jwtSecret);
 // One login lasts a day. No refresh tokens: a stolen token works until it expires
 // (listed under known limitations). The cookie uses the same lifetime.
 export const TOKEN_TTL_SECONDS = 24 * 60 * 60;
+export const TOKEN_COOKIE = "token";
 
 export function signToken(user: TokenUser): Promise<string> {
   return new SignJWT({ role: user.role })

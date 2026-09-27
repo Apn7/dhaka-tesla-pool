@@ -14,7 +14,7 @@ Take-home project for the RoBenDevs Software Engineer Internship. The brief is i
 - Vitest + supertest against a real Postgres
 - `docker compose up` runs everything
 
-Not installed yet: Zod, supertest. Add each one together with the first code that uses it.
+Not installed yet: supertest. Add each one together with the first code that uses it.
 
 ## Commands
 
@@ -35,6 +35,8 @@ Tests: `pnpm test` in backend/ (Vitest, runs once). Test files sit next to the c
 - **Migrations are automatic, seed is not.** The app migrates itself at startup. Data the app needs to work (the Dhaka map: areas + roads) is a migration (`drizzle/0001_dhaka_map.sql`), so it exists before the server builds the road graph. Demo data (users, vehicles) lives in `src/db/seed.ts` (`pnpm db:seed`); only docker compose runs it automatically (one-shot `seed` service). The app never seeds itself.
 - **Passwords:** Node's built-in `scrypt` (`src/lib/password.ts`), stored as `scrypt$N$r$p$salt$hash`. No bcrypt dependency.
 - **Login tokens:** `src/lib/token.ts` signs and verifies a JWT (`jose`, HS256) holding the user id and role, valid 1 day. `JWT_SECRET` must be at least 32 characters or the backend refuses to start. No refresh tokens (a stolen token works until it expires; listed as a known limitation).
+- **Auth API** (`src/modules/auth/`): `POST /api/auth/signup` (passengers only, logs in straight away), `login`, `logout`, `GET /api/auth/me`. `requireAuth(...roles)` in `src/middleware/auth.ts` reads the `token` cookie (one line, no cookie-parser) and sets `req.user`: 401 without a valid token, 403 for the wrong role. Duplicate email = the insert hits the unique index (Postgres `23505`) → 409, no check-then-insert race. Login gives the same 401 for unknown email and wrong password.
+- **Errors:** `src/middleware/errors.ts` is the last middleware. `ZodError` → 400 with a list of fields, `express.json()` errors keep their 4xx, anything else → logged + 500. Zod email pattern: `z.string().trim().toLowerCase().pipe(z.email())` (`z.email().trim()` checks the format before trimming).
 - **Backend `app.ts` / `server.ts` split.** `app.ts` builds and exports the Express app. `server.ts` only calls `listen`. Tests should import `app` directly (supertest), never start the server.
 - **Backend is ESM with `module: nodenext`.** Relative imports need the `.js` suffix, even in `.ts` files (`import { app } from "./app.js"`).
 - **Frontend uses `output: "standalone"`** in `next.config.ts`. The frontend Dockerfile depends on it. Don't remove it.
