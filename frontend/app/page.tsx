@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { getJson, postJson, type User } from "@/lib/api";
+import { PassengerView } from "./passenger";
 
 export default function Home() {
   // undefined = still asking the API, null = not logged in
@@ -17,23 +18,29 @@ export default function Home() {
     setUser(null);
   }
 
+  if (user) {
+    return (
+      <main className="flex flex-1 flex-col items-center gap-6 p-6">
+        <header className="flex w-full max-w-md items-center justify-between">
+          <p>
+            <span className="font-semibold">Dhaka Tesla Pool</span> · {user.name}{" "}
+            <span className="text-zinc-500">({user.role === "DRIVER" ? "driver" : "passenger"})</span>
+          </p>
+          <button onClick={logout} className="text-sm underline">
+            Log out
+          </button>
+        </header>
+        {user.role === "PASSENGER" ? <PassengerView /> : <p>The driver screen comes next.</p>}
+      </main>
+    );
+  }
+
   return (
     <main className="flex flex-1 flex-col items-center justify-center gap-4 p-6 text-center">
       <h1 className="text-3xl font-semibold">Dhaka Tesla Pool</h1>
       <p className="text-zinc-600 dark:text-zinc-400">Share a seat. Split the fare. Survive Dhaka traffic.</p>
 
       {user === undefined && <p className="text-sm text-zinc-500">Loading…</p>}
-
-      {user && (
-        <>
-          <p>
-            Hi {user.name} <span className="text-zinc-500">({user.role === "DRIVER" ? "driver" : "passenger"})</span>
-          </p>
-          <button onClick={logout} className="rounded-md border border-zinc-300 px-4 py-2 dark:border-zinc-700">
-            Log out
-          </button>
-        </>
-      )}
 
       {user === null && (
         <div className="flex gap-3">
