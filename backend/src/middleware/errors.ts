@@ -11,7 +11,7 @@ export const errorHandler: ErrorRequestHandler = (err, _req, res, _next) => {
     });
     return;
   }
-  // Broken JSON or a too-large body from express.json() carries its own 4xx status
+  // HttpError from our services, or broken JSON / a too-large body from express.json()
   if (err.status >= 400 && err.status < 500) {
     res.status(err.status).json({ error: err.message });
     return;

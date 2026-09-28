@@ -17,3 +17,7 @@ pool.on("error", (err) => {
   console.error("Postgres pool error (idle connection dropped)", err.message);
 });
 export const db = drizzle({ client: pool });
+
+// Postgres 23505: a unique index refused the row. Drizzle keeps the pg error as `cause`.
+export const isUniqueViolation = (err: unknown) =>
+  (err as { cause?: { code?: string } }).cause?.code === "23505";

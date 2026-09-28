@@ -1,5 +1,5 @@
 import { eq, sql } from "drizzle-orm";
-import { db } from "../../db/index.js";
+import { db, isUniqueViolation } from "../../db/index.js";
 import { users } from "../../db/schema.js";
 import { hashPassword, verifyPassword } from "../../lib/password.js";
 
@@ -21,9 +21,9 @@ export async function signup(input: { name: string; email: string; password: str
       .returning(publicUser);
     return user;
   } catch (err) {
-    // 23505 = unique violation on users_email_unique. The insert itself checks it,
+    // users_email_unique refused it. The insert itself checks it,
     // so two sign-ups with the same email at the same moment can't both win.
-    if ((err as { cause?: { code?: string } }).cause?.code === "23505") return null;
+    if (isUniqueViolation(err)) return null;
     throw err;
   }
 }
