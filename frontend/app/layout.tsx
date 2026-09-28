@@ -1,5 +1,9 @@
 import type { Metadata } from "next";
+import { Barlow_Condensed } from "next/font/google";
 import "./globals.css";
+
+// Road-sign condensed type for the wordmark, status and fares; body text stays system sans
+const display = Barlow_Condensed({ subsets: ["latin"], weight: ["600", "700"], variable: "--font-barlow" });
 
 export const metadata: Metadata = {
   title: "Dhaka Tesla Pool",
@@ -8,8 +12,8 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="en" className="h-full antialiased">
-      <body className="min-h-full flex flex-col">{children}</body>
+    <html lang="en" className={`${display.variable} h-full antialiased`}>
+      <body className="flex min-h-full flex-col">{children}</body>
     </html>
   );
 }

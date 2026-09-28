@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { getJson, postJson, type User } from "@/lib/api";
+import { ui } from "@/lib/ui";
+import { Wordmark } from "./parts";
 import { PassengerView } from "./passenger";
 
 export default function Home() {
@@ -20,35 +22,50 @@ export default function Home() {
 
   if (user) {
     return (
-      <main className="flex flex-1 flex-col items-center gap-6 p-6">
-        <header className="flex w-full max-w-md items-center justify-between">
-          <p>
-            <span className="font-semibold">Dhaka Tesla Pool</span> · {user.name}{" "}
-            <span className="text-zinc-500">({user.role === "DRIVER" ? "driver" : "passenger"})</span>
-          </p>
-          <button onClick={logout} className="text-sm underline">
-            Log out
-          </button>
+      <>
+        <header className="border-b border-line bg-white">
+          <div className="mx-auto flex max-w-md items-center justify-between px-5 py-3">
+            <Wordmark className="text-2xl" />
+            <div className="flex items-center gap-4 text-sm">
+              <span>
+                {user.name}
+                <span className="text-muted"> ({user.role === "DRIVER" ? "driver" : "passenger"})</span>
+              </span>
+              <button onClick={logout} className="font-medium underline">
+                Log out
+              </button>
+            </div>
+          </div>
         </header>
-        {user.role === "PASSENGER" ? <PassengerView /> : <p>The driver screen comes next.</p>}
-      </main>
+        <main className="mx-auto flex w-full max-w-md flex-1 flex-col gap-6 px-5 py-6">
+          {user.role === "PASSENGER" ? <PassengerView /> : <p className="text-muted">The driver screen comes next.</p>}
+        </main>
+      </>
     );
   }
 
   return (
-    <main className="flex flex-1 flex-col items-center justify-center gap-4 p-6 text-center">
-      <h1 className="text-3xl font-semibold">Dhaka Tesla Pool</h1>
-      <p className="text-zinc-600 dark:text-zinc-400">Share a seat. Split the fare. Survive Dhaka traffic.</p>
+    <main className="mx-auto flex w-full max-w-md flex-1 flex-col justify-center gap-8 px-5 py-10">
+      <div className="flex flex-col gap-3">
+        <Wordmark className="text-6xl leading-none" />
+        <p className="font-display text-2xl leading-tight font-semibold">
+          Share a seat. Split the fare. Survive Dhaka traffic.
+        </p>
+        <p className="text-muted">
+          Pool a three-seat rickshaw with people going your way across 12 Dhaka areas. Everyone pays their own fare,
+          in cash, 20% off.
+        </p>
+      </div>
 
-      {user === undefined && <p className="text-sm text-zinc-500">Loading…</p>}
+      {user === undefined && <p className="text-sm text-muted">Loading…</p>}
 
       {user === null && (
-        <div className="flex gap-3">
-          <Link href="/login" className="rounded-md bg-red-600 px-4 py-2 font-medium text-white">
+        <div className="flex flex-col gap-3">
+          <Link href="/login" className={`${ui.primary} text-center`}>
             Log in
           </Link>
-          <Link href="/signup" className="rounded-md border border-zinc-300 px-4 py-2 dark:border-zinc-700">
-            Sign up
+          <Link href="/signup" className={`${ui.secondary} text-center`}>
+            Create an account
           </Link>
         </div>
       )}
