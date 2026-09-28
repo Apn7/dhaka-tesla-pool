@@ -28,6 +28,10 @@ requestsRouter.post("/", async (req, res) => {
   res.status(201).json(await requests.book(req.user!.id, t.pickupAreaId, t.dropoffAreaId, t.seats));
 });
 
+requestsRouter.post("/:id/cancel", async (req, res) => {
+  res.json(await requests.cancel(req.user!.id, z.uuid().parse(req.params.id)));
+});
+
 requestsRouter.get("/current", async (req, res) => {
   res.json({ request: await requests.current(req.user!.id) });
 });

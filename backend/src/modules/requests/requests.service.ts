@@ -1,8 +1,8 @@
-import { and, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, count, desc, eq, inArray, ne, sql } from "drizzle-orm";
 import { db, isUniqueViolation } from "../../db/index.js";
 import { rideEvents, rideRequests, rides, users, vehicles } from "../../db/schema.js";
 import { calculateFare } from "../../domain/fare.js";
-import type { RequestStatus } from "../../domain/lifecycle.js";
+import { REQUEST_TRANSITIONS, allowedFrom, type RequestStatus } from "../../domain/lifecycle.js";
 import { HttpError } from "../../lib/http-error.js";
 import { getMap } from "../areas/areas.service.js";
 
@@ -65,6 +65,64 @@ export async function current(passengerId: string) {
     .leftJoin(users, eq(users.id, vehicles.driverId))
     .where(and(eq(rideRequests.passengerId, passengerId), inArray(rideRequests.status, ACTIVE)));
   return row ?? null;
+}
+
+const CANCELLABLE = allowedFrom(REQUEST_TRANSITIONS, "CANCELLED");
+
+// Cancel before the ride starts: frees the seats, and cancels the ride if nobody is left
+export function cancel(passengerId: string, requestId: string) {
+  return db.transaction(async (tx) => {
+    // Owner in WHERE: someone else's request looks like it doesn't exist
+    const mine = and(eq(rideRequests.id, requestId), eq(rideRequests.passengerId, passengerId));
+    const [seen] = await tx.select({ rideId: rideRequests.rideId }).from(rideRequests).where(mine);
+    if (!seen) throw new HttpError(404, "Ride request not found");
+
+    // Lock order: the ride row first, then its requests. Driver actions use the same order,
+    // so a cancel and a start at the same moment wait in line instead of deadlocking.
+    const [ride] = seen.rideId
+      ? await tx.select({ status: rides.status }).from(rides).where(eq(rides.id, seen.rideId)).for("update")
+      : [];
+    const [request] = await tx
+      .select({ status: rideRequests.status, rideId: rideRequests.rideId, seats: rideRequests.seats })
+      .from(rideRequests)
+      .where(mine)
+      .for("update");
+
+    // A driver accepted it between our two reads, so its ride is not locked: start over
+    if (request.rideId !== seen.rideId) throw new HttpError(409, "Your ride just changed, please try again");
+    if (!CANCELLABLE.includes(request.status)) throw new HttpError(409, "This ride can no longer be cancelled");
+
+    await tx.update(rideRequests).set({ status: "CANCELLED" }).where(eq(rideRequests.id, requestId));
+    await tx.insert(rideEvents).values({
+      rideId: request.rideId,
+      rideRequestId: requestId,
+      actorId: passengerId,
+      fromStatus: request.status,
+      toStatus: "CANCELLED",
+    });
+
+    if (request.rideId) {
+      await tx
+        .update(rides)
+        .set({ seatsTaken: sql`${rides.seatsTaken} - ${request.seats}` })
+        .where(eq(rides.id, request.rideId));
+
+      const [left] = await tx
+        .select({ n: count() })
+        .from(rideRequests)
+        .where(and(eq(rideRequests.rideId, request.rideId), ne(rideRequests.status, "CANCELLED")));
+      if (left.n === 0) {
+        await tx.update(rides).set({ status: "CANCELLED" }).where(eq(rides.id, request.rideId));
+        await tx.insert(rideEvents).values({
+          rideId: request.rideId,
+          actorId: passengerId,
+          fromStatus: ride.status,
+          toStatus: "CANCELLED",
+        });
+      }
+    }
+    return { id: requestId, status: "CANCELLED" as const };
+  });
 }
 
 // Finished trips (completed or cancelled), newest first.
