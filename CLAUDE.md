@@ -14,7 +14,6 @@ Take-home project for the RoBenDevs Software Engineer Internship. The brief is i
 - Vitest + supertest against a real Postgres
 - `docker compose up` runs everything
 
-Not installed yet: Zod, JWT, supertest. Add each one in its own step.
 
 ## Commands
 
@@ -27,16 +26,20 @@ Not installed yet: Zod, JWT, supertest. Add each one in its own step.
 - Demo logins (seed): `jashim@`, `kamal@` (drivers), `nusrat@`, `rafiq@`, `shirin@` (passengers) `teslapool.test`, password `bullet123`. Local seed: `pnpm db:seed` in backend/
 - Health check: `GET http://localhost:4000/health`
 
-Tests: `pnpm test` in backend/ (Vitest, runs once). Test files sit next to the code as `*.test.ts` and are left out of the `tsc` build.
+Tests: `pnpm test` in backend/ (Vitest, runs once; needs `docker compose up -d db`). Test files sit next to the code as `*.test.ts` and are left out of the `tsc` build. Unit tests cover `domain/` and `lib/`; integration tests call the real `app` with supertest. `vitest.config.ts` points `DATABASE_URL` at `tesla_pool_test` on the same Postgres and sets a test-only `JWT_SECRET`. `test/global-setup.ts` drops and rebuilds that database before every run (migrations + seed), and refuses to touch any database whose name doesn't end in `_test`. Use a fresh email per test (`crypto.randomUUID()`), since test files share the database.
 
 ## Architecture notes
 
 - **Backend layout: feature modules + pure domain.** `src/modules/<feature>/` holds `<feature>.routes.ts` (HTTP only: Zod-validate input, call the service, map result to a status code; no SQL, no business rules) and `<feature>.service.ts` (business rules, transactions, Drizzle queries). `src/domain/` holds pure functions with no DB or HTTP (`graph.ts` road distances, matching, fare, lifecycle transition map) and is unit tested directly. `src/middleware/` has auth and error handling. No repository layer: Drizzle is already the data layer, and the atomic seat-claim SQL must stay visible.
 - **Migrations are automatic, seed is not.** The app migrates itself at startup. Data the app needs to work (the Dhaka map: areas + roads) is a migration (`drizzle/0001_dhaka_map.sql`), so it exists before the server builds the road graph. Demo data (users, vehicles) lives in `src/db/seed.ts` (`pnpm db:seed`); only docker compose runs it automatically (one-shot `seed` service). The app never seeds itself.
 - **Passwords:** Node's built-in `scrypt` (`src/lib/password.ts`), stored as `scrypt$N$r$p$salt$hash`. No bcrypt dependency.
+- **Login tokens:** `src/lib/token.ts` signs and verifies a JWT (`jose`, HS256) holding the user id and role, valid 1 day. `JWT_SECRET` must be at least 32 characters or the backend refuses to start. No refresh tokens (a stolen token works until it expires; listed as a known limitation).
+- **Auth API** (`src/modules/auth/`): `POST /api/auth/signup` (passengers only, logs in straight away), `login`, `logout`, `GET /api/auth/me`. `requireAuth(...roles)` in `src/middleware/auth.ts` reads the `token` cookie (one line, no cookie-parser) and sets `req.user`: 401 without a valid token, 403 for the wrong role. Duplicate email = the insert hits the unique index (Postgres `23505`) → 409, no check-then-insert race. Login gives the same 401 for unknown email and wrong password.
+- **Errors:** `src/middleware/errors.ts` is the last middleware. `ZodError` → 400 with a list of fields, `express.json()` errors keep their 4xx, anything else → logged + 500. Zod email pattern: `z.string().trim().toLowerCase().pipe(z.email())` (`z.email().trim()` checks the format before trimming).
 - **Backend `app.ts` / `server.ts` split.** `app.ts` builds and exports the Express app. `server.ts` only calls `listen`. Tests should import `app` directly (supertest), never start the server.
 - **Backend is ESM with `module: nodenext`.** Relative imports need the `.js` suffix, even in `.ts` files (`import { app } from "./app.js"`).
 - **Frontend uses `output: "standalone"`** in `next.config.ts`. The frontend Dockerfile depends on it. Don't remove it.
+- **Frontend → backend via one rewrite.** `next.config.ts` forwards `/api/*` to `BACKEND_URL` (default `http://localhost:4000` for `pnpm dev`). Next.js fixes it at **build time**: compose passes `BACKEND_URL=http://backend:4000` as a Docker build arg; Vercel must set it before building. Pages call the API only through `lib/api.ts` (`getJson`/`postJson`, same-site `fetch`, so the cookie travels by itself; a non-JSON answer such as a sleeping backend becomes "Can't reach the server"). Pages so far: `/` (asks `/api/auth/me`), `/login` (one-tap demo cast buttons), `/signup`, sharing `app/auth-form.tsx`. No Next.js route protection (`proxy.ts`): the backend already answers 401.
 - **Next.js version is new (16.x).** Read [frontend/AGENTS.md](frontend/AGENTS.md): check `frontend/node_modules/next/dist/docs/` before writing Next.js code.
 - **Compose startup order:** `db` (pg_isready) → `backend` (waits for db healthy, migrates, healthcheck hits `/health`) → one-shot `seed` and `frontend` (both wait for a healthy backend). All ports bind to `127.0.0.1` only. `.env` must set `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB` or compose refuses to start.
 - **Drizzle is pinned to 0.45 (not the 1.0 RC).** Online docs mix 1.0 syntax in. For 0.45: `migrate(db, { migrationsFolder })` needs the folder; migration files go to `backend/drizzle/`. When unsure, check the installed types in `node_modules/drizzle-orm`.
