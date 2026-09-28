@@ -50,7 +50,10 @@ services:
         condition: service_healthy
 
   frontend:
-    build: ./frontend
+    build:
+      context: ./frontend
+      args:
+        BACKEND_URL: http://backend:4000 # the /api rewrite target, fixed at build time
     restart: unless-stopped
     depends_on:
       backend:
