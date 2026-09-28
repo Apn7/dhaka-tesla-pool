@@ -14,7 +14,6 @@ Take-home project for the RoBenDevs Software Engineer Internship. The brief is i
 - Vitest + supertest against a real Postgres
 - `docker compose up` runs everything
 
-Not installed yet: supertest. Add each one together with the first code that uses it.
 
 ## Commands
 
@@ -27,7 +26,7 @@ Not installed yet: supertest. Add each one together with the first code that use
 - Demo logins (seed): `jashim@`, `kamal@` (drivers), `nusrat@`, `rafiq@`, `shirin@` (passengers) `teslapool.test`, password `bullet123`. Local seed: `pnpm db:seed` in backend/
 - Health check: `GET http://localhost:4000/health`
 
-Tests: `pnpm test` in backend/ (Vitest, runs once). Test files sit next to the code as `*.test.ts` and are left out of the `tsc` build. `vitest.config.ts` sets a test-only `JWT_SECRET`.
+Tests: `pnpm test` in backend/ (Vitest, runs once; needs `docker compose up -d db`). Test files sit next to the code as `*.test.ts` and are left out of the `tsc` build. Unit tests cover `domain/` and `lib/`; integration tests call the real `app` with supertest. `vitest.config.ts` points `DATABASE_URL` at `tesla_pool_test` on the same Postgres and sets a test-only `JWT_SECRET`. `test/global-setup.ts` drops and rebuilds that database before every run (migrations + seed), and refuses to touch any database whose name doesn't end in `_test`. Use a fresh email per test (`crypto.randomUUID()`), since test files share the database.
 
 ## Architecture notes
 
