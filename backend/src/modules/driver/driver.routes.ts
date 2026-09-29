@@ -24,3 +24,13 @@ driverRouter.get("/requests", async (req, res) => {
 driverRouter.post("/requests/:id/accept", async (req, res) => {
   res.json(await driver.accept(req.user!.id, z.uuid().parse(req.params.id)));
 });
+
+// arrive → DRIVER_ARRIVED, start → STARTED, complete → COMPLETED, on the driver's own active ride
+driverRouter.post("/ride/:step", async (req, res) => {
+  const step = z.enum(["arrive", "start", "complete"]).parse(req.params.step);
+  res.json(await driver.advance(req.user!.id, step));
+});
+
+driverRouter.get("/history", async (req, res) => {
+  res.json({ rides: await driver.history(req.user!.id) });
+});

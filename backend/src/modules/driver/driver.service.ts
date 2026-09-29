@@ -1,7 +1,7 @@
-import { and, asc, eq, inArray, ne, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, ne, sql } from "drizzle-orm";
 import { db } from "../../db/index.js";
 import { rideEvents, rideRequests, rides, users, vehicles } from "../../db/schema.js";
-import { OPEN_RIDE_STATUSES, type RideStatus } from "../../domain/lifecycle.js";
+import { OPEN_RIDE_STATUSES, RIDE_TRANSITIONS, allowedFrom, type RideStatus } from "../../domain/lifecycle.js";
 import { planDropoffs } from "../../domain/matching.js";
 import { HttpError } from "../../lib/http-error.js";
 import { getMap } from "../areas/areas.service.js";
@@ -177,4 +177,71 @@ export function accept(driverId: string, requestId: string) {
     }
     return { rideId: ride.id };
   });
+}
+
+const STEP = { arrive: "DRIVER_ARRIVED", start: "STARTED", complete: "COMPLETED" } as const;
+export type Step = keyof typeof STEP;
+
+// Move the driver's active ride one step. Everyone still on board moves with it.
+// Going offline mid-trip is allowed, so there is no online check here.
+export function advance(driverId: string, step: Step) {
+  const to = STEP[step];
+  return db.transaction(async (tx) => {
+    const vehicle = await myVehicle(driverId);
+    // Ride row first, as in cancel, so Start and a passenger's Cancel queue up instead of deadlocking
+    const [ride] = await tx
+      .select()
+      .from(rides)
+      .where(and(eq(rides.vehicleId, vehicle.id), inArray(rides.status, ACTIVE_RIDE)))
+      .for("update");
+    if (!ride) throw new HttpError(404, "You have no active ride");
+    if (!allowedFrom(RIDE_TRANSITIONS, to).includes(ride.status)) {
+      throw new HttpError(409, `Can't ${step} now: the ride is ${ride.status}`);
+    }
+
+    await tx.update(rides).set({ status: to }).where(eq(rides.id, ride.id));
+    await tx.insert(rideEvents).values({ rideId: ride.id, actorId: driverId, fromStatus: ride.status, toStatus: to });
+
+    // A matched request mirrors its ride (MATCHED while the ride is ACCEPTED)
+    const passengerFrom = ride.status === "ACCEPTED" ? "MATCHED" : ride.status;
+    const moved = await tx
+      .update(rideRequests)
+      .set({ status: to })
+      .where(and(eq(rideRequests.rideId, ride.id), eq(rideRequests.status, passengerFrom)))
+      .returning({ id: rideRequests.id });
+    if (moved.length > 0) {
+      await tx.insert(rideEvents).values(
+        moved.map((r) => ({
+          rideId: ride.id,
+          rideRequestId: r.id,
+          actorId: driverId,
+          fromStatus: passengerFrom,
+          toStatus: to,
+        })),
+      );
+    }
+    return { rideId: ride.id, status: to };
+  });
+}
+
+// Finished rides of the driver's Tesla, newest first, with the cash collected.
+// ponytail: last 50, no paging; add a cursor when a driver has more history than that.
+export async function history(driverId: string) {
+  const vehicle = await myVehicle(driverId);
+  const completed = sql`${rideRequests.status} = 'COMPLETED'`;
+  return db
+    .select({
+      id: rides.id,
+      status: rides.status,
+      pickupAreaId: rides.pickupAreaId,
+      createdAt: rides.createdAt,
+      passengers: sql<number>`(count(${rideRequests.id}) FILTER (WHERE ${completed}))::int`,
+      cashPaisa: sql<number>`(coalesce(sum(${rideRequests.farePaisa}) FILTER (WHERE ${completed}), 0))::int`,
+    })
+    .from(rides)
+    .leftJoin(rideRequests, eq(rideRequests.rideId, rides.id))
+    .where(and(eq(rides.vehicleId, vehicle.id), inArray(rides.status, ["COMPLETED", "CANCELLED"])))
+    .groupBy(rides.id)
+    .orderBy(desc(rides.createdAt))
+    .limit(50);
 }
