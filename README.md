@@ -284,6 +284,7 @@ Copy `.env.example` to `.env`. It holds no real secrets.
 | `BACKEND_URL` | frontend build | `http://localhost:4000` (the default) | Read at **build** time by the `/api` rewrite. Compose passes `http://backend:4000`. |
 | `PORT` | backend | `4000` (the default) | Hosts like Render set it. |
 | `NODE_ENV` | backend | `production` in the Docker image | Turns on the cookie's `Secure` flag. |
+| `COOKIE_SECURE` | backend | `false` in `docker-compose.yml` only | Turns the `Secure` flag off again for local Docker, which serves plain http: Safari drops Secure cookies on `http://localhost`. Never set it on a real host. |
 
 ### With Docker (one command)
 
