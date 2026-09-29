@@ -69,6 +69,11 @@ From the live site, at phone size.
 - One button for the next step: arrived → start trip → complete.
 - See past rides with the number of passengers and the cash collected.
 
+**Both screens**
+
+- Loading, empty and error states: "Loading…" until the first answer, a message while the server can't be reached (it clears by itself on the next refresh), and a "Waking up the free server" notice.
+- Every action button shows that it's working ("Requesting…", "Cancelling…") and can't be pressed twice meanwhile. The server refuses doubles anyway.
+
 **Pool**
 
 - Several requests share one ride. Occupied seats never exceed capacity: the check is in the SQL and in a database constraint.

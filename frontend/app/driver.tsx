@@ -44,6 +44,8 @@ export function DriverView() {
   const [waiting, setWaiting] = useState<Waiting[]>([]);
   const [history, setHistory] = useState<PastRide[]>([]);
   const [error, setError] = useState<string | null>(null);
+  // A failed poll shows until the next one works
+  const [pollError, setPollError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   const refresh = useCallback(
@@ -59,6 +61,7 @@ export function DriverView() {
         }
         if (open.ok) setWaiting(open.data.requests);
         if (past.ok) setHistory(past.data.rides);
+        setPollError(me.ok ? null : me.error.error);
       }),
     [],
   );
@@ -81,15 +84,17 @@ export function DriverView() {
     setBusy(false);
   }
 
-  if (!vehicle) return <p className="text-muted">Loading your Tesla…</p>;
+  const alert = (pollError ?? error) && (
+    <p role="alert" className="text-sm text-brand">
+      {pollError ?? error}
+    </p>
+  );
+
+  if (!vehicle) return alert || <p className="text-muted">Loading your Tesla…</p>;
 
   return (
     <>
-      {error && (
-        <p role="alert" className="text-sm text-brand">
-          {error}
-        </p>
-      )}
+      {alert}
 
       <section className={`${ui.panel} flex items-center justify-between gap-4`}>
         <div>

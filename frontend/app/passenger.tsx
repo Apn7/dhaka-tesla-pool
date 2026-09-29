@@ -34,9 +34,13 @@ const STATUS_DOT: Record<string, string> = {
 
 export function PassengerView() {
   const [areas, setAreas] = useState<Area[]>([]);
-  const [current, setCurrent] = useState<Current | null>(null);
+  // undefined = not loaded yet, null = no active ride
+  const [current, setCurrent] = useState<Current | null>();
   const [history, setHistory] = useState<Past[]>([]);
   const [error, setError] = useState<string | null>(null);
+  // A failed poll shows until the next one works
+  const [pollError, setPollError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
 
   const refresh = useCallback(
     () =>
@@ -46,6 +50,7 @@ export function PassengerView() {
       ]).then(([now, past]) => {
         if (now.ok) setCurrent(now.data.request);
         if (past.ok) setHistory(past.data.requests);
+        setPollError(now.ok ? null : now.error.error);
       }),
     [],
   );
@@ -60,18 +65,24 @@ export function PassengerView() {
   const areaName = (id: string) => areas.find((a) => a.id === id)?.name ?? "";
 
   async function cancel(id: string) {
+    setBusy(true);
     const res = await postJson(`/requests/${id}/cancel`);
     setError(res.ok ? null : res.error.error);
-    refresh();
+    await refresh();
+    setBusy(false);
   }
+
+  const alert = (pollError ?? error) && (
+    <p role="alert" className="text-sm text-brand">
+      {pollError ?? error}
+    </p>
+  );
+
+  if (current === undefined) return alert || <p className="text-muted">Loading your rides…</p>;
 
   return (
     <>
-      {error && (
-        <p role="alert" className="text-sm text-brand">
-          {error}
-        </p>
-      )}
+      {alert}
 
       {current ? (
         <section className={`${ui.panel} flex flex-col gap-5`} aria-live="polite">
@@ -109,8 +120,8 @@ export function PassengerView() {
           </dl>
 
           {CANCELLABLE.includes(current.status) && (
-            <button onClick={() => cancel(current.id)} className={ui.secondary}>
-              Cancel ride
+            <button onClick={() => cancel(current.id)} disabled={busy} className={ui.secondary}>
+              {busy ? "Cancelling…" : "Cancel ride"}
             </button>
           )}
         </section>
@@ -147,13 +158,14 @@ export function PassengerView() {
   );
 }
 
-function BookingForm({ areas, onBooked }: { areas: Area[]; onBooked: () => void }) {
+function BookingForm({ areas, onBooked }: { areas: Area[]; onBooked: () => Promise<void> }) {
   const [pickup, setPickup] = useState("");
   const [dropoff, setDropoff] = useState("");
   const [seats, setSeats] = useState(1);
   // The quote remembers which choice it belongs to, so a slow answer never shows the wrong price
   const [quote, setQuote] = useState<{ for: string; data: Quote } | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
 
   const choice = `${pickup}|${dropoff}|${seats}`;
   const ready = pickup !== "" && dropoff !== "" && pickup !== dropoff;
@@ -168,9 +180,11 @@ function BookingForm({ areas, onBooked }: { areas: Area[]; onBooked: () => void 
 
   async function submit(e: FormEvent) {
     e.preventDefault();
+    setBusy(true);
     const res = await postJson("/requests", { pickupAreaId: pickup, dropoffAreaId: dropoff, seats });
-    if (res.ok) onBooked();
+    if (res.ok) await onBooked(); // the form goes away once the new ride shows
     else setError(res.error.error);
+    setBusy(false);
   }
 
   const areaSelect = (label: string, value: string, onChange: (id: string) => void, skip = "") => (
@@ -233,8 +247,8 @@ function BookingForm({ areas, onBooked }: { areas: Area[]; onBooked: () => void 
           {error}
         </p>
       )}
-      <button type="submit" disabled={!ready} className={ui.primary}>
-        Request ride
+      <button type="submit" disabled={!ready || busy} className={ui.primary}>
+        {busy ? "Requesting…" : "Request ride"}
       </button>
     </form>
   );
