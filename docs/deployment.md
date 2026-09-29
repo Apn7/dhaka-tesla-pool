@@ -91,6 +91,7 @@ In PowerShell: `$env:DATABASE_URL='<neon connection string>'; pnpm db:seed`. A v
 3. **Seed:** ran `pnpm db:seed` against Neon: 12 areas, 22 roads, 5 users, 2 cars.
 4. **Vercel:** the first build failed; the second passed (see below).
 5. **Smoke test** on the live address: 16 of 16 checks passed.
+6. **Keep-warm ping** (evening): the API got a database-free `GET /`, and a cron-job.org job calls it every 10 minutes (see [Free-plan limits](#free-plan-limits)). The smoke test passed again, 16 of 16, and left a second completed ride.
 
 ### What went wrong
 
@@ -112,9 +113,11 @@ This left one completed ride in the live database. Jashim was set back offline.
 
 ## Free-plan limits
 
-- **The API sleeps** after 15 minutes without visitors. While it wakes (about a minute), Render answers 502 at once instead of waiting. The app retries every 3 seconds for up to 90 seconds and shows "Waking up the free server" meanwhile (`frontend/lib/api.ts`). Render gives 750 free instance hours a month.
+- **The API would sleep** after 15 minutes without visitors; the keep-warm ping below stops that. If it sleeps anyway (the ping fails, or Render restarts it), Render answers 502 at once while it wakes (about a minute). The app retries every 3 seconds for up to 90 seconds and shows "Waking up the free server" meanwhile (`frontend/lib/api.ts`).
 - **The database sleeps** after 5 idle minutes and wakes in about a second. The free plan has 100 CU-hours (compute-unit hours) a month, about 400 hours at the smallest size, and 0.5 GB of storage.
-- **No keep-warm ping, and no health check on Render.** `/health` runs a query, so calling it every few minutes would keep Neon awake around the clock and use up the free hours in about 16 days.
+- **Keep-warm ping on `/`, never on `/health`.** cron-job.org (free) calls `GET https://dhaka-tesla-pool-api-pdi0.onrender.com/` every 10 minutes. `/` answers 200 without a query, so Neon still sleeps. Awake all month is at most 744 hours, inside Render's 750 free instance hours a month (counted per workspace; this is its only service).
+  - Not `/health`: it runs a query, so Neon would never sleep and would use up its free hours in about 16 days. That is also why Render's own health check stays off.
+  - Not `/api/auth/me`, which also skips the database but answers 401 without a cookie. cron-job.org marks non-2xx answers as failed and switches a job off after more than 25 failures in a row, so that ping would stop by itself within about 4 hours.
 - **Login takes about 2.5 s** on the free 0.1 CPU. Password hashing (`scrypt`) is slow on purpose, and the settings are the same as locally.
 - **Vercel's Hobby plan** is for non-commercial use only.
 
@@ -123,6 +126,7 @@ This left one completed ride in the live database. Jashim was set back offline.
 - **Deploy a change:** push to the tracked branch. Vercel rebuilds the frontend on every push. Render redeploys only when something under `backend/` changed. New migrations run by themselves when the backend starts.
 - **Other branches** get a Vercel preview link. Previews ask for a Vercel login, and they use the same live API and database.
 - **Check health:** `GET https://dhaka-tesla-pool-api-pdi0.onrender.com/health` answers `{"status":"ok","db":"up"}`. If the API is asleep, the first call takes about a minute.
-- **Logs:** Render dashboard → the service → Logs. Vercel dashboard → the project → Deployments.
+- **Ping:** cron-job.org → the job → History shows every call; each should be 200. Pausing the job lets the API sleep again.
+- **Logs:** Render dashboard → the service → Logs. The API logs one line per request (method, path, status, time), so the ping shows up as `GET / 200` every 10 minutes. Vercel dashboard → the project → Deployments.
 - **Switch to a release:** after cutting `release/v1.0.0`, change the branch in both places (Render: Settings → Build & Deploy → Branch. Vercel: Settings → Environments → Production → Branch Tracking). Redeploy both, then repeat the smoke test.
 - **Change a secret:** edit it in Render's Environment settings, and Render redeploys. A new `JWT_SECRET` logs everyone out, because old cookies stop verifying.

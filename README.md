@@ -10,7 +10,7 @@ A ride-pooling MVP for three-seat electric rickshaws ("Teslas") in Dhaka, built 
 | **Demo video (6 min)** | _Link added after recording._ |
 | **Stack** | Next.js 16 · Express 5 · PostgreSQL 18 · Drizzle ORM · TypeScript · Docker Compose |
 
-> The live API runs on a free plan and sleeps after 15 quiet minutes. The first visit after a pause can take about a minute.
+> The live API runs on a free plan. A ping every 10 minutes keeps it awake. If it falls asleep anyway, the first visit takes about a minute, and the app shows "Waking up the free server" meanwhile.
 
 ## Contents
 
@@ -361,6 +361,7 @@ All routes are under `/api` and exchange JSON. The login cookie travels by itsel
 | POST | `/api/driver/requests/:id/accept` | driver | Accept into a new or open ride |
 | POST | `/api/driver/ride/:step` | driver | `arrive`, `start` or `complete` the own active ride |
 | GET | `/api/driver/history` | driver | Past rides with passengers and cash, newest 50 |
+| GET | `/` | anyone | 200 `{"status":"ok"}` without touching the database (for the keep-warm ping) |
 | GET | `/health` | anyone | Database check: 200 `{"db":"up"}` or 503 |
 
 Errors: **400** lists every invalid field. **401** means not logged in. **403** means the wrong role. **404** means not found, or not yours: someone else's request looks exactly like a missing one. **409** means the wrong state, a full car, or a lost race. Drivers never send a ride id: every driver action works on their own car's active ride.
@@ -387,7 +388,7 @@ To check that the tests really guard the risky rules, we broke the code on purpo
 | App | https://dhaka-tesla-pool-beta.vercel.app |
 | API health | https://dhaka-tesla-pool-api-pdi0.onrender.com/health |
 
-Free plans only: Vercel (Next.js) → Render (Express in Docker, Singapore) → Neon (PostgreSQL 18, Singapore). The browser only talks to Vercel, as it does locally. The live site follows the release branch; each push redeploys by itself. A 16-point smoke test on the live site passed: booking, pooling, fares, the full lifecycle and the cookie flags.
+Free plans only: Vercel (Next.js) → Render (Express in Docker, Singapore) → Neon (PostgreSQL 18, Singapore). The browser only talks to Vercel, as it does locally. The live site follows the release branch; each push redeploys by itself. A free outside ping (cron-job.org) calls `GET /` every 10 minutes, so the API doesn't sleep; `/` never touches the database, so Neon still can. A 16-point smoke test on the live site passed: booking, pooling, fares, the full lifecycle and the cookie flags.
 
 Settings, why these hosts, the free-plan limits and how to operate it: [docs/deployment.md](docs/deployment.md).
 
@@ -435,7 +436,7 @@ Where the brief leaves room (Section 17), these are my choices:
 - Lists show the newest 50 entries, without paging.
 - Migrations take no lock between instances (fine for one backend).
 - No frontend tests (lint only), and no CI pipeline: the tests run locally.
-- Free hosting: the API sleeps after 15 quiet minutes (about a minute to wake up), and login takes about 2.5 s on the free CPU because password hashing is slow on purpose.
+- Free hosting: the API stays awake only thanks to an outside ping; if the ping stops, it sleeps after 15 quiet minutes (about a minute to wake up). Login takes about 2.5 s on the free CPU because password hashing is slow on purpose.
 
 ## Next improvements
 
