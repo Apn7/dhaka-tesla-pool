@@ -14,7 +14,7 @@ A ride-pooling MVP for three-seat electric rickshaws ("Teslas") in Dhaka, built 
 
 ## Contents
 
-[Summary](#summary) · [Problem](#the-problem) · [Screenshots](#screenshots) · [Features](#features) · [How it works](#how-it-works) · [Architecture](#architecture) · [Database](#database-erd) · [Concurrency](#concurrency-the-last-seat) · [Tech choices](#tech-choices) · [Project structure](#project-structure) · [Run it](#run-it) · [Demo logins](#demo-logins) · [API](#api-overview) · [Tests](#what-the-tests-cover) · [Deployment](#deployment) · [Assumptions](#assumptions) · [Decisions](#decisions-and-trade-offs) · [Limitations](#known-limitations) · [Next](#next-improvements) · [Git workflow](#git-workflow) · [AI usage](#ai-usage)
+[Summary](#summary) · [Problem](#the-problem) · [Screenshots](#screenshots) · [Features](#features) · [How it works](#how-it-works) · [Architecture](#architecture) · [Database](#database-erd) · [Concurrency](#concurrency-the-last-seat) · [Tech choices](#tech-choices) · [Project structure](#project-structure) · [Run it](#run-it) · [Demo logins](#demo-logins) · [API](#api-overview) · [Tests](#what-the-tests-cover) · [Deployment](#deployment) · [Assumptions](#assumptions) · [Decisions](#decisions-and-trade-offs) · [Limitations](#known-limitations) · [Next](#next-improvements) · [If it goes viral](#if-it-goes-viral) · [Git workflow](#git-workflow) · [AI usage](#ai-usage)
 
 ## Summary
 
@@ -454,6 +454,14 @@ Where the brief leaves room (Section 17), these are my choices:
 6. **CI:** GitHub Actions runs the backend tests on every PR, and Render deploys only after they pass.
 7. **End-to-end tests** for the passenger and driver flows (Playwright).
 8. **Cursor paging** for the history lists.
+
+## If it goes viral
+
+The PRD bonus: 1 million passengers and 100,000 drivers. My reasoning, with a diagram and ten changes: [docs/scaling.md](docs/scaling.md). In short:
+
+- **The first problem is all the asking.** The screens ask for news every 5 seconds: about 38,000 questions per second at the busiest hour, against about 28 bookings per second. So the server should tell the phones about changes instead (WebSockets).
+- **More copies of the server** behind a load balancer, and read-only database copies for past rides. Seats and bookings always use the main database.
+- **The seat claim stays as it is:** it locks one car's row, so cars never wait for each other.
 
 ## Git workflow
 
