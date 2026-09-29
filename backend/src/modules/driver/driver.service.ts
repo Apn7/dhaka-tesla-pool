@@ -1,7 +1,13 @@
 import { and, asc, desc, eq, inArray, ne, sql } from "drizzle-orm";
 import { db } from "../../db/index.js";
 import { rideEvents, rideRequests, rides, users, vehicles } from "../../db/schema.js";
-import { OPEN_RIDE_STATUSES, RIDE_TRANSITIONS, allowedFrom, type RideStatus } from "../../domain/lifecycle.js";
+import {
+  OPEN_RIDE_STATUSES,
+  RIDE_TRANSITIONS,
+  allowedFrom,
+  type RequestStatus,
+  type RideStatus,
+} from "../../domain/lifecycle.js";
 import { planDropoffs } from "../../domain/matching.js";
 import { HttpError } from "../../lib/http-error.js";
 import { getMap } from "../areas/areas.service.js";
@@ -15,12 +21,12 @@ async function myVehicle(driverId: string) {
   return vehicle;
 }
 
-async function activeRide(vehicleId: string) {
-  const [ride] = await db
+// The car's active ride (0 or 1 rows). Returns the query, so a transaction can add .for("update").
+function activeRide(vehicleId: string, q: Pick<typeof db, "select"> = db) {
+  return q
     .select()
     .from(rides)
     .where(and(eq(rides.vehicleId, vehicleId), inArray(rides.status, ACTIVE_RIDE)));
-  return ride ?? null;
 }
 
 // Passengers still on a ride (everyone but those who cancelled). `q` lets a transaction reuse it.
@@ -42,7 +48,7 @@ function passengersOf(rideId: string, q: Pick<typeof db, "select"> = db) {
 // The driver's Tesla and active ride, with passengers in drop-off order
 export async function me(driverId: string) {
   const vehicle = await myVehicle(driverId);
-  const ride = await activeRide(vehicle.id);
+  const [ride] = await activeRide(vehicle.id);
   if (!ride) return { vehicle, ride: null };
 
   const passengers = await passengersOf(ride.id);
@@ -68,7 +74,7 @@ export async function setOnline(driverId: string, online: boolean) {
 export async function openRequests(driverId: string) {
   const vehicle = await myVehicle(driverId);
   if (!vehicle.isOnline) return [];
-  const ride = await activeRide(vehicle.id);
+  const [ride] = await activeRide(vehicle.id);
   if (ride && !OPEN_RIDE_STATUSES.includes(ride.status)) return [];
 
   // ponytail: oldest 50 waiting requests; with many drivers, filter by the driver's area first
@@ -112,11 +118,7 @@ export function accept(driverId: string, requestId: string) {
     if (!vehicle) throw new HttpError(404, "No Tesla is registered to you");
     if (!vehicle.isOnline) throw new HttpError(409, "Go online to accept rides");
 
-    let [ride] = await tx
-      .select()
-      .from(rides)
-      .where(and(eq(rides.vehicleId, vehicle.id), inArray(rides.status, ACTIVE_RIDE)))
-      .for("update");
+    let [ride] = await activeRide(vehicle.id, tx).for("update");
 
     const [request] = await tx.select().from(rideRequests).where(eq(rideRequests.id, requestId));
     if (!request) throw new HttpError(404, "Ride request not found");
@@ -156,24 +158,14 @@ export function accept(driverId: string, requestId: string) {
       .where(and(eq(rideRequests.id, requestId), eq(rideRequests.status, "REQUESTED")))
       .returning({ id: rideRequests.id });
     if (matched.length === 0) throw new HttpError(409, "Someone else took this request, or it was cancelled");
-    await tx.insert(rideEvents).values({
-      rideId: ride.id,
-      rideRequestId: requestId,
-      actorId: driverId,
-      fromStatus: "REQUESTED",
-      toStatus: "MATCHED",
-    });
+    const logRequest = (fromStatus: RequestStatus, toStatus: RequestStatus) =>
+      tx.insert(rideEvents).values({ rideId: ride.id, rideRequestId: requestId, actorId: driverId, fromStatus, toStatus });
+    await logRequest("REQUESTED", "MATCHED");
 
     // Joining after the driver arrived: the passenger catches up in the same transaction
     if (ride.status === "DRIVER_ARRIVED") {
       await tx.update(rideRequests).set({ status: "DRIVER_ARRIVED" }).where(eq(rideRequests.id, requestId));
-      await tx.insert(rideEvents).values({
-        rideId: ride.id,
-        rideRequestId: requestId,
-        actorId: driverId,
-        fromStatus: "MATCHED",
-        toStatus: "DRIVER_ARRIVED",
-      });
+      await logRequest("MATCHED", "DRIVER_ARRIVED");
     }
     return { rideId: ride.id };
   });
@@ -189,11 +181,7 @@ export function advance(driverId: string, step: Step) {
   return db.transaction(async (tx) => {
     const vehicle = await myVehicle(driverId);
     // Ride row first, as in cancel, so Start and a passenger's Cancel queue up instead of deadlocking
-    const [ride] = await tx
-      .select()
-      .from(rides)
-      .where(and(eq(rides.vehicleId, vehicle.id), inArray(rides.status, ACTIVE_RIDE)))
-      .for("update");
+    const [ride] = await activeRide(vehicle.id, tx).for("update");
     if (!ride) throw new HttpError(404, "You have no active ride");
     if (!allowedFrom(RIDE_TRANSITIONS, to).includes(ride.status)) {
       throw new HttpError(409, `Can't ${step} now: the ride is ${ride.status}`);
