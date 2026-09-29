@@ -52,7 +52,7 @@ Nothing secret is in git. The two secrets, `DATABASE_URL` and `JWT_SECRET`, live
 | Setting | Value |
 |---|---|
 | Service | Web Service, language **Docker** |
-| Branch | **`pre-release`** (switch to `release/v1.0.0` once it is cut) |
+| Branch | **`release/v1.0.0`** (was `pre-release` until the release was cut) |
 | Root directory | `backend` (Dockerfile path `./Dockerfile`) |
 | Region / instance | Singapore / **Free** (0.1 CPU, 512 MB) |
 | Environment | `DATABASE_URL` = the Neon string. `JWT_SECRET` = 64 random hex characters from `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`, different from the local one. |
@@ -66,7 +66,7 @@ Nothing secret is in git. The two secrets, `DATABASE_URL` and `JWT_SECRET`, live
 | Setting | Value |
 |---|---|
 | Root directory | `frontend` (framework Next.js) |
-| Production branch | **`pre-release`** (switch to `release/v1.0.0` once it is cut) |
+| Production branch | **`release/v1.0.0`** (was `pre-release` until the release was cut) |
 | Environment | `BACKEND_URL` = `https://dhaka-tesla-pool-api-pdi0.onrender.com` (no trailing slash) |
 | Install command | `npx pnpm@12.4.2 install --frozen-lockfile` |
 | Build command | `npx pnpm@12.4.2 run build` |
@@ -128,5 +128,5 @@ This left one completed ride in the live database. Jashim was set back offline.
 - **Check health:** `GET https://dhaka-tesla-pool-api-pdi0.onrender.com/health` answers `{"status":"ok","db":"up"}`. If the API is asleep, the first call takes about a minute.
 - **Ping:** cron-job.org → the job → History shows every call; each should be 200. Pausing the job lets the API sleep again.
 - **Logs:** Render dashboard → the service → Logs. The API logs one line per request (method, path, status, time), so the ping shows up as `GET / 200` every 10 minutes. Vercel dashboard → the project → Deployments.
-- **Switch to a release:** after cutting `release/v1.0.0`, change the branch in both places (Render: Settings → Build & Deploy → Branch. Vercel: Settings → Environments → Production → Branch Tracking). Redeploy both, then repeat the smoke test.
+- **Switch to a new release:** after cutting the next `release/*` branch, change the branch in both places (Render: Settings → Build & Deploy → Branch. Vercel: Settings → Environments → Production → Branch Tracking). Redeploy both, then repeat the smoke test.
 - **Change a secret:** edit it in Render's Environment settings, and Render redeploys. A new `JWT_SECRET` logs everyone out, because old cookies stop verifying.
