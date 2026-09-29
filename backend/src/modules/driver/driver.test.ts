@@ -1,10 +1,12 @@
 import { afterAll, describe, expect, test } from "vitest";
-import { book, loginAs, newDriver, newPassenger, rideWith } from "../../../test/helpers.js";
-import { pool } from "../../db/index.js";
+import { eq } from "drizzle-orm";
+import { book, loginAs, newDriver, newPassenger, rideRow, rideWith, type Agent } from "../../../test/helpers.js";
+import { db, pool } from "../../db/index.js";
+import { rideEvents, rideRequests } from "../../db/schema.js";
 
 afterAll(() => pool.end());
 
-const listedIds = async (agent: Awaited<ReturnType<typeof newDriver>>["agent"]) =>
+const listedIds = async (agent: Agent) =>
   ((await agent.get("/api/driver/requests")).body.requests as { id: string }[]).map((r) => r.id);
 
 describe("driver basics", () => {
@@ -64,5 +66,108 @@ describe("requests that fit an open ride (real Dhaka map)", () => {
     const { ride } = (await jashim.get("/api/driver/me")).body;
     expect(ride).toMatchObject({ status: "ACCEPTED", seatsTaken: 2, capacity: 3 });
     expect(ride.passengers.map((p: { name: string }) => p.name)).toEqual(["Nusrat", "Rafiq"]);
+  });
+});
+
+const accept = (driver: Agent, requestId: string) => driver.post(`/api/driver/requests/${requestId}/accept`);
+const requestRow = async (id: string) => (await db.select().from(rideRequests).where(eq(rideRequests.id, id)))[0];
+
+describe("accepting requests into a pool", () => {
+  test("Jashim accepts Nusrat, then Rafiq joins the same ride", async () => {
+    const jashim = (await newDriver()).agent;
+    const nusrat = await newPassenger("Nusrat");
+    const rafiq = await newPassenger("Rafiq");
+    const nusratId = await book(nusrat, "Banani", "Mohakhali");
+    const rafiqId = await book(rafiq, "Banani", "Gulshan 1");
+
+    const first = await accept(jashim, nusratId);
+    expect(first.status).toBe(200);
+    expect((await nusrat.get("/api/requests/current")).body.request).toMatchObject({
+      status: "MATCHED",
+      rideStatus: "ACCEPTED",
+      driverName: "Jashim",
+      vehicleName: "Bullet",
+    });
+
+    const second = await accept(jashim, rafiqId);
+    expect(second.body.rideId).toBe(first.body.rideId); // one pool
+    expect(await rideRow(first.body.rideId)).toMatchObject({ status: "ACCEPTED", seatsTaken: 2 });
+    expect((await nusrat.get("/api/requests/current")).body.request.otherPassengers).toBe(1);
+
+    const events = await db.select().from(rideEvents).where(eq(rideEvents.rideId, first.body.rideId));
+    expect(events.map((e) => e.toStatus).sort()).toEqual(["ACCEPTED", "MATCHED", "MATCHED"]);
+  });
+
+  test("the backend re-checks the route: someone bound for Uttara can't join Nusrat (+5.6 km)", async () => {
+    const jashim = (await newDriver()).agent;
+    await accept(jashim, await book(await newPassenger("Nusrat"), "Banani", "Mohakhali"));
+    const uttara = await book(await newPassenger("Shirin"), "Banani", "Uttara");
+
+    expect((await accept(jashim, uttara)).status).toBe(409);
+    expect((await requestRow(uttara)).status).toBe("REQUESTED");
+  });
+
+  test("an offline driver can't accept", async () => {
+    const jashim = (await newDriver("Jashim", false)).agent;
+    const nusratId = await book(await newPassenger("Nusrat"), "Banani", "Mohakhali");
+    expect((await accept(jashim, nusratId)).status).toBe(409);
+  });
+
+  test("joining after the driver arrived: the passenger goes straight to 'driver arrived'", async () => {
+    const { agent: jashim, vehicleId } = await newDriver();
+    await rideWith([await book(await newPassenger("Nusrat"), "Banani", "Mohakhali")], "DRIVER_ARRIVED", vehicleId);
+    const rafiqId = await book(await newPassenger("Rafiq"), "Banani", "Gulshan 1");
+
+    expect((await accept(jashim, rafiqId)).status).toBe(200);
+    expect((await requestRow(rafiqId)).status).toBe("DRIVER_ARRIVED");
+    const events = await db.select().from(rideEvents).where(eq(rideEvents.rideRequestId, rafiqId));
+    expect(events.map((e) => e.toStatus)).toEqual(expect.arrayContaining(["MATCHED", "DRIVER_ARRIVED"]));
+  });
+});
+
+// PRD Section 12: two concurrent requests can't corrupt pool capacity
+describe("races, fired at the same moment against real Postgres", () => {
+  test("last seat: Bullet has 1 seat left and two requests are accepted at once; only one gets it", async () => {
+    const { agent: jashim, vehicleId } = await newDriver();
+    const rideId = await rideWith([await book(await newPassenger("Rafiq"), "Banani", "Gulshan 1", 2)], "ACCEPTED", vehicleId);
+    const nusratId = await book(await newPassenger("Nusrat"), "Banani", "Mohakhali");
+    const shirinId = await book(await newPassenger("Shirin"), "Banani", "Mohakhali");
+
+    const results = await Promise.all([accept(jashim, nusratId), accept(jashim, shirinId)]);
+    expect(results.map((r) => r.status).sort()).toEqual([200, 409]);
+    expect(await rideRow(rideId)).toMatchObject({ seatsTaken: 3, capacity: 3 });
+  });
+
+  test("Jashim and Kamal accept the same request at once; one wins, the other gets no ride", async () => {
+    const jashim = (await newDriver("Jashim")).agent;
+    const kamal = (await newDriver("Kamal")).agent;
+    const nusratId = await book(await newPassenger("Nusrat"), "Banani", "Mohakhali");
+
+    const results = await Promise.all([accept(jashim, nusratId), accept(kamal, nusratId)]);
+    expect(results.map((r) => r.status).sort()).toEqual([200, 409]);
+
+    const rides = await Promise.all([jashim, kamal].map(async (d) => (await d.get("/api/driver/me")).body.ride));
+    expect(rides.filter((r) => r !== null)).toHaveLength(1); // the loser's new ride was rolled back
+    expect((await requestRow(nusratId)).rideId).toBe(rides.find((r) => r !== null).id);
+  });
+
+  test("Nusrat cancels while Jashim accepts: never 'cancelled but still holding a seat'", async () => {
+    // A few rounds, so both orders (cancel first, accept first) get a chance to happen
+    for (let round = 0; round < 5; round++) {
+      const jashim = (await newDriver()).agent;
+      const nusrat = await newPassenger("Nusrat");
+      const nusratId = await book(nusrat, "Banani", "Mohakhali");
+
+      const [cancelled, accepted] = await Promise.all([
+        nusrat.post(`/api/requests/${nusratId}/cancel`),
+        accept(jashim, nusratId),
+      ]);
+      expect([cancelled.status, accepted.status].sort()).toEqual([200, 409]);
+
+      const request = await requestRow(nusratId);
+      const ride = (await jashim.get("/api/driver/me")).body.ride;
+      if (request.status === "CANCELLED") expect(ride).toBeNull();
+      else expect(ride).toMatchObject({ seatsTaken: 1, passengers: [{ name: "Nusrat" }] });
+    }
   });
 });

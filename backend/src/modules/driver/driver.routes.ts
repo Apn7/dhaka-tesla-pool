@@ -20,3 +20,7 @@ driverRouter.post("/online", async (req, res) => {
 driverRouter.get("/requests", async (req, res) => {
   res.json({ requests: await driver.openRequests(req.user!.id) });
 });
+
+driverRouter.post("/requests/:id/accept", async (req, res) => {
+  res.json(await driver.accept(req.user!.id, z.uuid().parse(req.params.id)));
+});

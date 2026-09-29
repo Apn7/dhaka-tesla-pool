@@ -1,6 +1,6 @@
-import { and, asc, eq, inArray, ne } from "drizzle-orm";
+import { and, asc, eq, inArray, ne, sql } from "drizzle-orm";
 import { db } from "../../db/index.js";
-import { rideRequests, rides, users, vehicles } from "../../db/schema.js";
+import { rideEvents, rideRequests, rides, users, vehicles } from "../../db/schema.js";
 import { OPEN_RIDE_STATUSES, type RideStatus } from "../../domain/lifecycle.js";
 import { planDropoffs } from "../../domain/matching.js";
 import { HttpError } from "../../lib/http-error.js";
@@ -23,9 +23,9 @@ async function activeRide(vehicleId: string) {
   return ride ?? null;
 }
 
-// Passengers still on a ride (everyone but those who cancelled)
-function passengersOf(rideId: string) {
-  return db
+// Passengers still on a ride (everyone but those who cancelled). `q` lets a transaction reuse it.
+function passengersOf(rideId: string, q: Pick<typeof db, "select"> = db) {
+  return q
     .select({
       requestId: rideRequests.id,
       name: users.name,
@@ -101,4 +101,80 @@ export async function openRequests(driverId: string) {
   return waiting.filter(
     (r) => r.seats <= freeSeats && planDropoffs(ride.pickupAreaId, [...onBoard, r.dropoffAreaId], distance) !== null,
   );
+}
+
+// Put a waiting request on the driver's ride, creating the ride if there is none.
+// Lock order: car, then ride, then request (cancel uses ride, then request), so no deadlocks.
+export function accept(driverId: string, requestId: string) {
+  return db.transaction(async (tx) => {
+    // Locking the car queues up one driver's accepts: a double tap can't create two rides
+    const [vehicle] = await tx.select().from(vehicles).where(eq(vehicles.driverId, driverId)).for("update");
+    if (!vehicle) throw new HttpError(404, "No Tesla is registered to you");
+    if (!vehicle.isOnline) throw new HttpError(409, "Go online to accept rides");
+
+    let [ride] = await tx
+      .select()
+      .from(rides)
+      .where(and(eq(rides.vehicleId, vehicle.id), inArray(rides.status, ACTIVE_RIDE)))
+      .for("update");
+
+    const [request] = await tx.select().from(rideRequests).where(eq(rideRequests.id, requestId));
+    if (!request) throw new HttpError(404, "Ride request not found");
+    if (request.status !== "REQUESTED") throw new HttpError(409, "This request is no longer waiting");
+
+    if (ride) {
+      // The backend re-checks the match on every accept, whatever the driver's screen showed
+      if (!OPEN_RIDE_STATUSES.includes(ride.status)) throw new HttpError(409, "Your ride has already started");
+      if (request.pickupAreaId !== ride.pickupAreaId) throw new HttpError(409, "This request starts somewhere else");
+      const onBoard = (await passengersOf(ride.id, tx)).map((p) => p.dropoffAreaId);
+      const { distance } = await getMap();
+      if (planDropoffs(ride.pickupAreaId, [...onBoard, request.dropoffAreaId], distance) === null) {
+        throw new HttpError(409, "This trip is too far off your route");
+      }
+    } else {
+      [ride] = await tx
+        .insert(rides)
+        .values({ vehicleId: vehicle.id, pickupAreaId: request.pickupAreaId, capacity: vehicle.capacity })
+        .returning();
+      await tx.insert(rideEvents).values({ rideId: ride.id, actorId: driverId, toStatus: "ACCEPTED" });
+    }
+
+    // Seat claim in one statement: the condition is checked on the row itself, so seats can
+    // never go over capacity (the rides_seats_within_capacity CHECK backs it up)
+    const claimed = await tx
+      .update(rides)
+      .set({ seatsTaken: sql`${rides.seatsTaken} + ${request.seats}` })
+      .where(and(eq(rides.id, ride.id), sql`${rides.seatsTaken} + ${request.seats} <= ${rides.capacity}`))
+      .returning({ id: rides.id });
+    if (claimed.length === 0) throw new HttpError(409, "Not enough free seats");
+
+    // Request claim: only while it is still waiting. Another driver or a cancel that got
+    // there first leaves 0 rows, and the whole transaction (seats, new ride) is undone.
+    const matched = await tx
+      .update(rideRequests)
+      .set({ status: "MATCHED", rideId: ride.id })
+      .where(and(eq(rideRequests.id, requestId), eq(rideRequests.status, "REQUESTED")))
+      .returning({ id: rideRequests.id });
+    if (matched.length === 0) throw new HttpError(409, "Someone else took this request, or it was cancelled");
+    await tx.insert(rideEvents).values({
+      rideId: ride.id,
+      rideRequestId: requestId,
+      actorId: driverId,
+      fromStatus: "REQUESTED",
+      toStatus: "MATCHED",
+    });
+
+    // Joining after the driver arrived: the passenger catches up in the same transaction
+    if (ride.status === "DRIVER_ARRIVED") {
+      await tx.update(rideRequests).set({ status: "DRIVER_ARRIVED" }).where(eq(rideRequests.id, requestId));
+      await tx.insert(rideEvents).values({
+        rideId: ride.id,
+        rideRequestId: requestId,
+        actorId: driverId,
+        fromStatus: "MATCHED",
+        toStatus: "DRIVER_ARRIVED",
+      });
+    }
+    return { rideId: ride.id };
+  });
 }
