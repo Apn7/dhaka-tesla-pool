@@ -13,5 +13,6 @@ export default defineConfig({
     // Test-only value, never used outside tests
     env: { JWT_SECRET: "test-only-jwt-secret-at-least-32-characters" },
     globalSetup: "./test/global-setup.ts",
+    silent: "passed-only", // request logs only for failing tests
   },
 });
