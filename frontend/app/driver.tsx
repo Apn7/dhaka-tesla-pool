@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { getJson, postJson } from "@/lib/api";
 import { STATUS_TEXT, tk } from "@/lib/format";
 import { ui } from "@/lib/ui";
+import { RouteLine } from "./parts";
 
 type Area = { id: string; name: string };
 type Vehicle = { name: string; capacity: number; isOnline: boolean };
@@ -211,15 +212,15 @@ function RideCard({
       </div>
 
       {/* The stops in order: pickup, then each drop-off along the shortest route */}
-      <ol className="ml-[5px] flex flex-col gap-3 border-l-2 border-line pl-5">
-        <li className="relative">
-          <span aria-hidden className="absolute top-1.5 -left-[27px] size-3 rounded-full border-[3px] border-ink bg-white" />
-          <p className="font-medium">{pickup}</p>
-          <p className="text-sm text-muted">Pick up everyone</p>
-        </li>
-        {ride.passengers.map((p, i) => (
-          <li key={p.requestId} className="relative flex justify-between gap-3">
-            <span aria-hidden className="absolute top-1.5 -left-[27px] size-3 bg-brand" />
+      <RouteLine
+        from={
+          <>
+            <p className="font-medium">{pickup}</p>
+            <p className="text-sm text-muted">Pick up everyone</p>
+          </>
+        }
+        to={ride.passengers.map((p, i) => (
+          <div key={p.requestId} className="flex justify-between gap-3">
             <div>
               <p className="font-medium">
                 {i + 1}. {areaName(p.dropoffAreaId)}
@@ -229,9 +230,9 @@ function RideCard({
               </p>
             </div>
             <p className="font-medium">{tk(p.farePaisa)}</p>
-          </li>
+          </div>
         ))}
-      </ol>
+      />
 
       <div className="flex items-baseline justify-between border-t border-line pt-4">
         <span className="text-sm text-muted">Cash to collect</span>
