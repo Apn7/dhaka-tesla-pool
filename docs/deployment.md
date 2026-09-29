@@ -95,6 +95,7 @@ In PowerShell: `$env:DATABASE_URL='<neon connection string>'; pnpm db:seed`. A v
 ### What went wrong
 
 - **Vercel used a very old pnpm.** It ignored `packageManager` in `frontend/package.json` (its Corepack step reported the field as missing) and guessed the pnpm version from the lockfile instead. pnpm 12 writes the lockfile as two YAML documents, which older pnpm versions can't read, so Vercel picked an old pnpm that also fails on Node 24 (`ERR_INVALID_THIS`). Fix: install and build commands that run exactly pnpm 12.4.2, the same version as the laptop and the Dockerfiles.
+- **The first visit after the API slept looked broken.** Render answered 502 while waking up, and the app showed the user as logged out, then "Can't reach the server" on login. Fix: the frontend retries 502/503/504 for up to 90 seconds with a "Waking up the free server" notice. It was tested against a fake backend that answers 502 for its first 10 seconds.
 - **The claude.ai Vercel connector could not create the project** (Vercel answered 403). The project was created with the Vercel CLI instead. Details in [ai-usage.md](ai-usage.md).
 
 ### Smoke test
@@ -111,7 +112,7 @@ This left one completed ride in the live database. Jashim was set back offline.
 
 ## Free-plan limits
 
-- **The API sleeps** after 15 minutes without visitors. The next visit waits about a minute, and the app shows "Can't reach the server. Try again in a moment." until it wakes. Render gives 750 free instance hours a month.
+- **The API sleeps** after 15 minutes without visitors. While it wakes (about a minute), Render answers 502 at once instead of waiting. The app retries every 3 seconds for up to 90 seconds and shows "Waking up the free server" meanwhile (`frontend/lib/api.ts`). Render gives 750 free instance hours a month.
 - **The database sleeps** after 5 idle minutes and wakes in about a second. The free plan has 100 CU-hours (compute-unit hours) a month, about 400 hours at the smallest size, and 0.5 GB of storage.
 - **No keep-warm ping, and no health check on Render.** `/health` runs a query, so calling it every few minutes would keep Neon awake around the clock and use up the free hours in about 16 days.
 - **Login takes about 2.5 s** on the free 0.1 CPU. Password hashing (`scrypt`) is slow on purpose, and the settings are the same as locally.
