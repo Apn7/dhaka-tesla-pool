@@ -4,6 +4,7 @@ import { db } from "./db/index.js";
 import { errorHandler } from "./middleware/errors.js";
 import { areasRouter } from "./modules/areas/areas.routes.js";
 import { authRouter } from "./modules/auth/auth.routes.js";
+import { driverRouter } from "./modules/driver/driver.routes.js";
 import { requestsRouter } from "./modules/requests/requests.routes.js";
 
 export const app = express();
@@ -23,5 +24,6 @@ app.get("/health", async (_req, res) => {
 app.use("/api/auth", authRouter);
 app.use("/api/areas", areasRouter);
 app.use("/api/requests", requestsRouter);
+app.use("/api/driver", driverRouter);
 
 app.use(errorHandler); // must stay last

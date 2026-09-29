@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { getJson, postJson, type User } from "@/lib/api";
 import { ui } from "@/lib/ui";
 import { Wordmark } from "./parts";
+import { DriverView } from "./driver";
 import { PassengerView } from "./passenger";
 
 export default function Home() {
@@ -38,7 +39,7 @@ export default function Home() {
           </div>
         </header>
         <main className="mx-auto flex w-full max-w-md flex-1 flex-col gap-6 px-5 py-6">
-          {user.role === "PASSENGER" ? <PassengerView /> : <p className="text-muted">The driver screen comes next.</p>}
+          {user.role === "PASSENGER" ? <PassengerView /> : <DriverView />}
         </main>
       </>
     );

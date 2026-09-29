@@ -82,7 +82,7 @@ export function PassengerView() {
 
           <RouteLine
             from={<p className="font-medium">{areaName(current.pickupAreaId)}</p>}
-            to={<p className="font-medium">{areaName(current.dropoffAreaId)}</p>}
+            to={[<p key="dropoff" className="font-medium">{areaName(current.dropoffAreaId)}</p>]}
           />
 
           <dl className="grid grid-cols-2 gap-y-2 border-t border-line pt-4 text-sm">
@@ -192,7 +192,7 @@ function BookingForm({ areas, onBooked }: { areas: Area[]; onBooked: () => void 
 
       <RouteLine
         from={areaSelect("Pickup area", pickup, setPickup)}
-        to={areaSelect("Drop-off area", dropoff, setDropoff, pickup)}
+        to={[areaSelect("Drop-off area", dropoff, setDropoff, pickup)]}
       />
 
       <fieldset className="flex items-center justify-between gap-4">

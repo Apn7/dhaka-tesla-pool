@@ -1,27 +1,12 @@
 import request from "supertest";
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
 import { app } from "../../app.js";
-import { eq, inArray } from "drizzle-orm";
+import { eq } from "drizzle-orm";
+import { book, loginAs, newPassenger, rideRow, rideWith } from "../../../test/helpers.js";
 import { db, pool } from "../../db/index.js";
-import { rideEvents, rideRequests, rides, users, vehicles } from "../../db/schema.js";
+import { rideEvents } from "../../db/schema.js";
 
 afterAll(() => pool.end());
-
-async function loginAs(name: string) {
-  const agent = request.agent(app);
-  await agent.post("/api/auth/login").send({ email: `${name}@teslapool.test`, password: "bullet123" });
-  return agent;
-}
-
-// A new passenger per test: each passenger may have only one active request, and test files
-// share the database, so tests that book must not use the seeded cast
-async function newPassenger(name: string) {
-  const agent = request.agent(app);
-  await agent
-    .post("/api/auth/signup")
-    .send({ name, email: `${name.toLowerCase()}.${crypto.randomUUID()}@teslapool.test`, password: "secret123" });
-  return agent;
-}
 
 // Area name → id, read through the API like the frontend does
 let area: Record<string, string>;
@@ -119,38 +104,6 @@ describe("booking a ride", () => {
     expect((await shirin.get("/api/requests/history")).body.requests).toEqual([]);
   });
 });
-
-async function book(agent: Awaited<ReturnType<typeof newPassenger>>, pickup: string, dropoff: string, seats = 1) {
-  return (await agent.post("/api/requests").send(trip(pickup, dropoff, seats))).body.id as string;
-}
-
-// The driver flow isn't built yet, so the test puts a ride straight into the test database:
-// a new driver and 3-seat Tesla, with the given requests matched onto it
-async function rideWith(requestIds: string[], status: "ACCEPTED" | "DRIVER_ARRIVED" | "STARTED" = "ACCEPTED") {
-  const [driver] = await db
-    .insert(users)
-    .values({ name: "Jashim", email: `jashim.${crypto.randomUUID()}@teslapool.test`, passwordHash: "-", role: "DRIVER" })
-    .returning();
-  const [bullet] = await db.insert(vehicles).values({ driverId: driver.id, name: "Bullet", capacity: 3 }).returning();
-  const booked = await db.select().from(rideRequests).where(inArray(rideRequests.id, requestIds));
-  const [ride] = await db
-    .insert(rides)
-    .values({
-      vehicleId: bullet.id,
-      pickupAreaId: booked[0].pickupAreaId,
-      status,
-      capacity: 3,
-      seatsTaken: booked.reduce((sum, r) => sum + r.seats, 0),
-    })
-    .returning();
-  await db
-    .update(rideRequests)
-    .set({ status: status === "ACCEPTED" ? "MATCHED" : status, rideId: ride.id })
-    .where(inArray(rideRequests.id, requestIds));
-  return ride.id;
-}
-
-const rideRow = async (id: string) => (await db.select().from(rides).where(eq(rides.id, id)))[0];
 
 describe("cancelling", () => {
   test("Nusrat cancels while waiting: it moves to her history, with an event", async () => {
