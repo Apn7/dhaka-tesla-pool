@@ -28,8 +28,9 @@ export async function signup(input: { name: string; email: string; password: str
   }
 }
 
-// Returns null for an unknown email and for a wrong password alike,
-// so login can't be used to find out who has an account
+// Returns null for an unknown email and for a wrong password alike, so the 401 message gives nothing away.
+// The timing still does: an unknown email skips the slow hash. Signup's 409 already shows which
+// emails have an account, so hashing a dummy password here would protect nothing.
 export async function login(email: string, password: string) {
   const [user] = await db
     .select({ ...publicUser, passwordHash: users.passwordHash })

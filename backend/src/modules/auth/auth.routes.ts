@@ -15,10 +15,12 @@ const signupBody = z.object({
 const loginBody = z.object({ email, password: z.string().max(200) });
 
 // httpOnly: page scripts can't read it. lax: other sites can't send it with their requests.
+// secure: HTTPS only in production. Local Docker runs the production image over plain http and sets
+// COOKIE_SECURE=false, because Safari drops Secure cookies on http://localhost (Chrome allows them).
 const cookieOptions: CookieOptions = {
   httpOnly: true,
   sameSite: "lax",
-  secure: process.env.NODE_ENV === "production",
+  secure: process.env.NODE_ENV === "production" && process.env.COOKIE_SECURE !== "false",
 };
 
 async function setLoginCookie(res: Response, user: TokenUser) {

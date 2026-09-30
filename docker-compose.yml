@@ -26,6 +26,8 @@ services:
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
       JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env}
+      # Plain http on localhost: a Secure cookie would be dropped by Safari
+      COOKIE_SECURE: "false"
     depends_on:
       db:
         condition: service_healthy
