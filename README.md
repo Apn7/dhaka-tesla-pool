@@ -7,7 +7,7 @@ A ride-pooling MVP for three-seat electric rickshaws ("Teslas") in Dhaka, built 
 | | |
 |---|---|
 | **Live app** | https://dhaka-tesla-pool-beta.vercel.app (tap a name on the login page, or use `nusrat@teslapool.test` / `bullet123`) |
-| **Demo video (6 min)** | _Link added after recording._ |
+| **Demo video (6 min)** | [Watch the walkthrough on Google Drive](https://drive.google.com/file/d/1NxxA8AX7FcTg0NDwfcrG1Bc3W-9yeA_k/view) |
 | **Stack** | Next.js 16 · Express 5 · PostgreSQL 18 · Drizzle ORM · TypeScript · Docker Compose |
 
 > The live API runs on a free plan. A ping every 10 minutes keeps it awake. If it falls asleep anyway, the first visit takes about a minute, and the app shows "Waking up the free server" meanwhile.
