@@ -55,7 +55,7 @@ From the live site, at phone size.
 
 - Sign up and log in. The session is an httpOnly cookie.
 - Pick a pickup and a drop-off from 12 Dhaka areas, and 1–3 seats. See the road distance and the fare breakdown before booking.
-- Track the trip: waiting → driver on the way → driver here → on the trip → completed (or cancelled). The screen refreshes every 5 seconds.
+- Track the trip: waiting → driver on the way → driver has arrived → on the trip → completed (or cancelled). The screen refreshes every 5 seconds.
 - See the driver and how many others share the car, never their names or fares.
 - Cancel for free until the trip starts.
 - See past trips with their fares.
@@ -154,7 +154,7 @@ flowchart LR
     A["backend<br/>Express 5 REST API<br/>auth · validation · business rules<br/>road graph (Floyd–Warshall, in memory)"]
     D[("db<br/>PostgreSQL 18")]
   end
-  B -- "HTTPS, one origin<br/>(httpOnly JWT cookie)" --> F
+  B -- "HTTP(S), one origin<br/>(httpOnly JWT cookie)" --> F
   F -- "/api/* forwarded" --> A
   A -- "SQL (Drizzle + pg)<br/>transactions, constraints" --> D
 ```
@@ -237,12 +237,12 @@ For each choice the PRD leaves open (Section 7): the alternatives, why it fits t
 | Area | Picked | Alternatives | Why it fits | Would switch when |
 |---|---|---|---|---|
 | Frontend | Next.js 16 (App Router), React 19 | React + Vite | Recommended by the PRD. Its rewrite forwards `/api/*` to Express, so the browser sees one site: a first-party cookie, no CORS, no nginx. | The app could ship as static files only; then Vite plus a reverse proxy. |
-| Backend | Express 5 | NestJS, Fastify | 17 endpoints. Express 5 passes errors from async handlers to the error middleware by itself. Structure comes from feature modules. | A bigger team wants enforced modules and dependency injection (NestJS), or throughput becomes the bottleneck (Fastify). |
+| Backend | Express 5 | NestJS, Fastify | 18 endpoints. Express 5 passes errors from async handlers to the error middleware by itself. Structure comes from feature modules. | A bigger team wants enforced modules and dependency injection (NestJS), or throughput becomes the bottleneck (Fastify). |
 | API style | REST + JSON | GraphQL, tRPC | Few resources and clear actions (accept, cancel, arrive, start, complete). Status codes carry the meaning: 409 = full car or lost race. Easy to test with supertest. | Many clients need different shapes of the same data (GraphQL). |
 | Database | PostgreSQL 18 | MySQL, SQLite, MongoDB | The hard rules are relational: a CHECK for capacity, partial unique indexes, row locks and transactions for the seat race. `uuidv7()` is built in. SQLite allows one writer at a time, so the race couldn't be tested for real. | Not the engine. At scale: read replicas, partitioning, PostGIS for real geography. |
 | ORM + migrations | Drizzle 0.45 + drizzle-kit | Prisma, raw `pg` | Stays close to SQL: the atomic seat claim, CHECKs and row locks are plain code. Migrations are plain SQL files, applied by the app at startup. | Drizzle 1.0 becomes stable (upgrade). |
 | Validation | Zod 4 | Joi, express-validator | One schema checks and types the input. Unknown fields, like a fare sent by the browser, are dropped. A 400 lists every wrong field. | Moving to NestJS and its validation pipes. |
-| Auth | JWT (`jose`, HS256) in an httpOnly cookie; passwords hashed with Node's `scrypt` | Server-side sessions, Auth.js, bcrypt | No session store for one backend. Page scripts can't read the cookie, and SameSite=Lax stops other sites from sending it. `scrypt` needs no dependency. | Stolen tokens must be revocable ("log out everywhere"): server-side sessions, or short tokens plus refresh tokens. |
+| Auth | JWT (`jose`, HS256) in an httpOnly cookie; passwords hashed with Node's `scrypt` | Server-side sessions, Auth.js, bcrypt | No session store for one backend. Page scripts can't read the cookie, and SameSite=Lax keeps it off other sites' form posts and background requests. `scrypt` needs no dependency. | Stolen tokens must be revocable ("log out everywhere"): server-side sessions, or short tokens plus refresh tokens. |
 | Styling | Tailwind CSS 4 | CSS modules, MUI, shadcn/ui | Colour tokens in one place (`@theme`) and no component library to ship. Enough for 4 screens. | Many more screens and forms: a component library. |
 | Tests | Vitest + supertest on a real Postgres | Jest, a mocked database, Testcontainers | The integrity rules live in Postgres, so the tests must hit Postgres. Races run with `Promise.all`. The test database is rebuilt on every run. | Running in CI: Testcontainers. Frontend flows: Playwright. |
 | Hosting | Vercel + Render + Neon, all free | Azure, Render's Postgres | See [docs/deployment.md](docs/deployment.md#why-these-hosts). | Cold starts start to hurt real users. |
@@ -266,7 +266,7 @@ frontend/
   app/                page.tsx picks passenger.tsx or driver.tsx by role; login/, signup/; parts.tsx
   lib/                api.ts (fetch wrapper), format.ts (Tk, status words), ui.ts (shared styles)
   next.config.ts      the /api/* rewrite to the backend
-docs/                 architecture.md, deployment.md, ai-usage.md, PRD.md, screenshots/
+docs/                 architecture.md, deployment.md, scaling.md, ai-usage.md, PRD.md, screenshots/
 docker-compose.yml    db → backend (migrates) → seed (once) → frontend
 ```
 
@@ -326,7 +326,7 @@ pnpm dev                                 # http://localhost:3000
 ```bash
 docker compose up -d db
 cd backend && pnpm test                  # Vitest: 64 tests, about 30 s
-cd frontend && pnpm lint                 # ESLint
+cd ../frontend && pnpm lint              # ESLint
 ```
 
 The tests use their own database, `tesla_pool_test`, dropped and rebuilt before every run. The setup refuses to touch any database whose name doesn't end in `_test`.
@@ -467,12 +467,14 @@ The PRD bonus: 1 million passengers and 100,000 drivers. My reasoning, with a di
 
 ```
 feature/* ──PR──▶ master ──▶ pre-release ──▶ release/v1.0.0 (deployed, shown in the video)
-                    ▲            │ docs, deployment checks
-                    └────────────┘ merged back after the release
+                    ▲        (docs, deployment checks)   │
+                    └───────────── PR #8 ────────────────┘
+                         merged back after the release
 ```
 
 - Seven feature branches, each merged into `master` through a pull request with a merge commit: `feature/project-setup`, `feature/database-schema`, `feature/tesla-pooling`, `feature/review-fixes`, `feature/passenger-auth`, `feature/passenger-booking`, `feature/driver-flow` (PRs #1–#7).
 - `pre-release` holds the integration work: this README, the docs and the deployment checks.
+- `release/v1.0.0` was cut from `pre-release`, deployed, and merged back into `master` through PR #8 with a merge commit. It stays as it was released; later fixes go to `master` through their own pull requests.
 - Commits follow `<type>(<scope>): <description>`, one logical change each.
 
 ## AI usage
